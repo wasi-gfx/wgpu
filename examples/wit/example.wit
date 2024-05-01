@@ -1,0 +1,12 @@
+package example:example;
+
+/// wit for the examples in this repo
+world example {
+    include wasi:webgpu/imports;
+
+    /// main entrypoint
+    export start: func(example: string);
+
+    /// print to stdout
+    import print: func(s: string);
+}

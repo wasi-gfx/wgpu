@@ -10,7 +10,7 @@ use crate::{
 use std::{future::Future, marker::PhantomData, ops::Range};
 
 wit_bindgen::generate!({
-    path: "wit",
+    path: "../wit",
     world: "wgpu:backend/main",
 });
 
