@@ -1,115 +1,101 @@
-use crate::{
-    AdapterInfo, BindGroupDescriptor, BindGroupLayoutDescriptor, BufferDescriptor,
-    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor,
-    DownlevelCapabilities, Features, Limits, MapMode, PipelineLayoutDescriptor,
-    RenderBundleEncoderDescriptor, RenderPipelineDescriptor, SamplerDescriptor,
-    ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, SurfaceStatus, SurfaceTargetUnsafe,
-    TextureDescriptor, TextureViewDescriptor, UncapturedErrorHandler,
+use crate::{context::downcast_ref, SurfaceTargetUnsafe, UncapturedErrorHandler};
+
+use std::{
+    future::{ready, Ready},
+    ops::Range,
 };
 
-use std::{future::Future, marker::PhantomData, ops::Range};
+use wasi::webgpu::{
+    graphics_context::{self, GraphicsContext},
+    mini_canvas::MiniCanvas,
+    webgpu,
+};
 
 wit_bindgen::generate!({
     path: "../wit",
     world: "wgpu:backend/main",
 });
 
-// TODO: get rid of this type.
-#[derive(Debug, Clone, Copy)]
-pub struct PlaceholderType;
-impl From<crate::context::ObjectId> for PlaceholderType {
+impl From<crate::context::ObjectId> for () {
     fn from(_value: crate::context::ObjectId) -> Self {
-        todo!()
+        ()
     }
 }
-impl From<PlaceholderType> for crate::context::ObjectId {
-    fn from(_value: PlaceholderType) -> Self {
-        todo!()
-    }
-}
-
-// TODO: get rid of this type.
-#[derive(Debug, Clone, Copy)]
-pub struct PlaceholderFuture<T>(PhantomData<T>);
-
-impl<T> Future for PlaceholderFuture<T> {
-    type Output = T;
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        todo!()
+impl From<()> for crate::context::ObjectId {
+    fn from(_value: ()) -> Self {
+        crate::context::ObjectId::UNUSED
     }
 }
 
 #[derive(Debug)]
-pub struct ContextWasiWebgpu(());
+pub struct ContextWasiWebgpu(webgpu::Gpu);
 
 impl crate::Context for ContextWasiWebgpu {
-    type AdapterId = PlaceholderType;
-    type AdapterData = PlaceholderType;
-    type DeviceId = PlaceholderType;
-    type DeviceData = PlaceholderType;
-    type QueueId = PlaceholderType;
-    type QueueData = PlaceholderType;
-    type ShaderModuleId = PlaceholderType;
-    type ShaderModuleData = PlaceholderType;
-    type BindGroupLayoutId = PlaceholderType;
-    type BindGroupLayoutData = PlaceholderType;
-    type BindGroupId = PlaceholderType;
-    type BindGroupData = PlaceholderType;
-    type TextureViewId = PlaceholderType;
-    type TextureViewData = PlaceholderType;
-    type SamplerId = PlaceholderType;
-    type SamplerData = PlaceholderType;
-    type BufferId = PlaceholderType;
-    type BufferData = PlaceholderType;
-    type TextureId = PlaceholderType;
-    type TextureData = PlaceholderType;
-    type QuerySetId = PlaceholderType;
-    type QuerySetData = PlaceholderType;
-    type PipelineLayoutId = PlaceholderType;
-    type PipelineLayoutData = PlaceholderType;
-    type RenderPipelineId = PlaceholderType;
-    type RenderPipelineData = PlaceholderType;
-    type ComputePipelineId = PlaceholderType;
-    type ComputePipelineData = PlaceholderType;
-    type CommandEncoderId = PlaceholderType;
-    type CommandEncoderData = PlaceholderType;
-    type ComputePassId = PlaceholderType;
-    type ComputePassData = PlaceholderType;
-    type RenderPassId = PlaceholderType;
-    type RenderPassData = PlaceholderType;
-    type CommandBufferId = PlaceholderType;
-    type CommandBufferData = PlaceholderType;
-    type RenderBundleEncoderId = PlaceholderType;
-    type RenderBundleEncoderData = PlaceholderType;
-    type RenderBundleId = PlaceholderType;
-    type RenderBundleData = PlaceholderType;
+    type AdapterId = ();
+    type AdapterData = webgpu::GpuAdapter;
+    type DeviceId = ();
+    type DeviceData = webgpu::GpuDevice;
+    type QueueId = ();
+    type QueueData = webgpu::GpuQueue;
+    type ShaderModuleId = ();
+    type ShaderModuleData = webgpu::GpuShaderModule;
+    type BindGroupLayoutId = ();
+    type BindGroupLayoutData = webgpu::GpuBindGroupLayout;
+    type BindGroupId = ();
+    type BindGroupData = webgpu::GpuBindGroup;
+    type TextureViewId = ();
+    type TextureViewData = webgpu::GpuTextureView;
+    type SamplerId = ();
+    type SamplerData = webgpu::GpuSampler;
+    type BufferId = ();
+    type BufferData = webgpu::GpuBuffer;
+    type TextureId = ();
+    type TextureData = webgpu::GpuTexture;
+    type QuerySetId = ();
+    type QuerySetData = webgpu::GpuQuerySet;
+    type PipelineLayoutId = ();
+    type PipelineLayoutData = webgpu::GpuPipelineLayout;
+    type RenderPipelineId = ();
+    type RenderPipelineData = webgpu::GpuRenderPipeline;
+    type ComputePipelineId = ();
+    type ComputePipelineData = webgpu::GpuComputePipeline;
+    type CommandEncoderId = ();
+    // Option so that command_encoder_finish can take ownership.
+    type CommandEncoderData = Option<webgpu::GpuCommandEncoder>;
+    type ComputePassId = ();
+    // Option so that command_encoder_end_compute_pass can take ownership.
+    type ComputePassData = Option<webgpu::GpuComputePassEncoder>;
+    type RenderPassId = ();
+    type RenderPassData = (); // TODO: fix type
+    type CommandBufferId = ();
+    type CommandBufferData = webgpu::GpuCommandBuffer;
+    type RenderBundleEncoderId = ();
+    type RenderBundleEncoderData = webgpu::GpuRenderBundleEncoder;
+    type RenderBundleId = ();
+    type RenderBundleData = webgpu::GpuRenderBundle;
 
-    type SurfaceId = PlaceholderType;
-    type SurfaceData = PlaceholderType;
-    type SurfaceOutputDetail = PlaceholderType;
-    type SubmissionIndex = PlaceholderType;
-    type SubmissionIndexData = PlaceholderFuture<Option<()>>;
+    type SurfaceId = ();
+    type SurfaceData = (MiniCanvas, GraphicsContext); // TODO: fix type
+    type SurfaceOutputDetail = (); // TODO: fix type
+    type SubmissionIndex = (); // TODO: fix type
+    type SubmissionIndexData = (); // TODO: fix type
 
-    type RequestAdapterFuture = PlaceholderFuture<Option<(PlaceholderType, PlaceholderType)>>;
-    type RequestDeviceFuture = PlaceholderFuture<
+    type RequestAdapterFuture = Ready<Option<((), webgpu::GpuAdapter)>>;
+    type RequestDeviceFuture = Ready<
         Result<
             (
-                PlaceholderType,
-                PlaceholderType,
-                PlaceholderType,
-                PlaceholderType,
+                Self::DeviceId,
+                Self::DeviceData,
+                Self::QueueId,
+                Self::QueueData,
             ),
             crate::RequestDeviceError,
         >,
     >;
-    type PopErrorScopeFuture = PlaceholderFuture<Option<crate::Error>>;
+    type PopErrorScopeFuture = Ready<Option<crate::Error>>; // TODO: fix type
 
     fn init(_instance_desc: wgt::InstanceDescriptor) -> Self {
-        todo!()
+        Self(webgpu::get_gpu())
     }
 
     unsafe fn instance_create_surface(
@@ -123,17 +109,20 @@ impl crate::Context for ContextWasiWebgpu {
         &self,
         _options: &crate::RequestAdapterOptions<'_, '_>,
     ) -> Self::RequestAdapterFuture {
-        todo!()
+        let adapter = self.0.request_adapter(None);
+        ready(Some(((), adapter)))
     }
 
     fn adapter_request_device(
         &self,
         _adapter: &Self::AdapterId,
-        _adapter_data: &Self::AdapterData,
+        adapter_data: &Self::AdapterData,
         _desc: &crate::DeviceDescriptor<'_>,
         _trace_dir: Option<&std::path::Path>,
     ) -> Self::RequestDeviceFuture {
-        todo!()
+        let device = adapter_data.request_device(None);
+        let queue = device.queue();
+        ready(Ok(((), device, (), queue)))
     }
 
     fn instance_poll_all_devices(&self, _force_wait: bool) -> bool {
@@ -153,33 +142,45 @@ impl crate::Context for ContextWasiWebgpu {
     fn adapter_features(
         &self,
         _adapter: &Self::AdapterId,
-        _adapter_data: &Self::AdapterData,
-    ) -> Features {
-        todo!()
+        adapter_data: &Self::AdapterData,
+    ) -> wgt::Features {
+        map_wgt_features(adapter_data.features())
     }
 
     fn adapter_limits(
         &self,
         _adapter: &Self::AdapterId,
-        _adapter_data: &Self::AdapterData,
-    ) -> Limits {
-        todo!()
+        adapter_data: &Self::AdapterData,
+    ) -> wgt::Limits {
+        map_wgt_limits(adapter_data.limits())
     }
 
     fn adapter_downlevel_capabilities(
         &self,
         _adapter: &Self::AdapterId,
         _adapter_data: &Self::AdapterData,
-    ) -> DownlevelCapabilities {
-        todo!()
+    ) -> wgt::DownlevelCapabilities {
+        // WASI-WebGPU is assumed to be fully compliant
+        wgt::DownlevelCapabilities::default()
     }
 
     fn adapter_get_info(
         &self,
         _adapter: &Self::AdapterId,
-        _adapter_data: &Self::AdapterData,
-    ) -> AdapterInfo {
-        todo!()
+        adapter_data: &Self::AdapterData,
+    ) -> wgt::AdapterInfo {
+        let _info = adapter_data.request_adapter_info();
+
+        // TODO: use data from `request_adapter_info`
+        wgt::AdapterInfo {
+            name: String::new(),
+            vendor: 0,
+            device: 0,
+            device_type: wgt::DeviceType::Other,
+            driver: String::new(),
+            driver_info: String::new(),
+            backend: wgt::Backend::WasiWebGpu,
+        }
     }
 
     fn adapter_get_texture_format_features(
@@ -248,38 +249,42 @@ impl crate::Context for ContextWasiWebgpu {
     fn device_features(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-    ) -> Features {
-        todo!()
+        device_data: &Self::DeviceData,
+    ) -> wgt::Features {
+        map_wgt_features(device_data.features())
     }
 
-    fn device_limits(&self, _device: &Self::DeviceId, _device_data: &Self::DeviceData) -> Limits {
-        todo!()
+    fn device_limits(
+        &self,
+        _device: &Self::DeviceId,
+        device_data: &Self::DeviceData,
+    ) -> wgt::Limits {
+        map_wgt_limits(device_data.limits())
     }
 
     fn device_downlevel_properties(
         &self,
         _device: &Self::DeviceId,
         _device_data: &Self::DeviceData,
-    ) -> DownlevelCapabilities {
+    ) -> wgt::DownlevelCapabilities {
         todo!()
     }
 
     fn device_create_shader_module(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: ShaderModuleDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: crate::ShaderModuleDescriptor<'_>,
         _shader_bound_checks: wgt::ShaderBoundChecks,
     ) -> (Self::ShaderModuleId, Self::ShaderModuleData) {
-        todo!()
+        ((), device_data.create_shader_module(desc.into()))
     }
 
     unsafe fn device_create_shader_module_spirv(
         &self,
         _device: &Self::DeviceId,
         _device_data: &Self::DeviceData,
-        _desc: &ShaderModuleDescriptorSpirV<'_>,
+        _desc: &crate::ShaderModuleDescriptorSpirV<'_>,
     ) -> (Self::ShaderModuleId, Self::ShaderModuleData) {
         todo!()
     }
@@ -287,73 +292,73 @@ impl crate::Context for ContextWasiWebgpu {
     fn device_create_bind_group_layout(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &BindGroupLayoutDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::BindGroupLayoutDescriptor<'_>,
     ) -> (Self::BindGroupLayoutId, Self::BindGroupLayoutData) {
-        todo!()
+        ((), device_data.create_bind_group_layout(&desc.into()))
     }
 
     fn device_create_bind_group(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &BindGroupDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::BindGroupDescriptor<'_>,
     ) -> (Self::BindGroupId, Self::BindGroupData) {
-        todo!()
+        ((), device_data.create_bind_group(desc.into()))
     }
 
     fn device_create_pipeline_layout(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &PipelineLayoutDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::PipelineLayoutDescriptor<'_>,
     ) -> (Self::PipelineLayoutId, Self::PipelineLayoutData) {
-        todo!()
+        ((), device_data.create_pipeline_layout(&desc.into()))
     }
 
     fn device_create_render_pipeline(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &RenderPipelineDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::RenderPipelineDescriptor<'_>,
     ) -> (Self::RenderPipelineId, Self::RenderPipelineData) {
-        todo!()
+        ((), device_data.create_render_pipeline(&desc.into()))
     }
 
     fn device_create_compute_pipeline(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &ComputePipelineDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::ComputePipelineDescriptor<'_>,
     ) -> (Self::ComputePipelineId, Self::ComputePipelineData) {
-        todo!()
+        ((), device_data.create_compute_pipeline(&desc.into()))
     }
 
     fn device_create_buffer(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &BufferDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::BufferDescriptor<'_>,
     ) -> (Self::BufferId, Self::BufferData) {
-        todo!()
+        ((), device_data.create_buffer(&desc.into()))
     }
 
     fn device_create_texture(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &TextureDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::TextureDescriptor<'_>,
     ) -> (Self::TextureId, Self::TextureData) {
-        todo!()
+        ((), device_data.create_texture(&desc.into()))
     }
 
     fn device_create_sampler(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &SamplerDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::SamplerDescriptor<'_>,
     ) -> (Self::SamplerId, Self::SamplerData) {
-        todo!()
+        ((), device_data.create_sampler(Some(&desc.into())))
     }
 
     fn device_create_query_set(
@@ -368,23 +373,26 @@ impl crate::Context for ContextWasiWebgpu {
     fn device_create_command_encoder(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _desc: &CommandEncoderDescriptor<'_>,
+        device_data: &Self::DeviceData,
+        desc: &crate::CommandEncoderDescriptor<'_>,
     ) -> (Self::CommandEncoderId, Self::CommandEncoderData) {
-        todo!()
+        (
+            (),
+            Some(device_data.create_command_encoder(Some(&desc.into()))),
+        )
     }
 
     fn device_create_render_bundle_encoder(
         &self,
         _device: &Self::DeviceId,
         _device_data: &Self::DeviceData,
-        _desc: &RenderBundleEncoderDescriptor<'_>,
+        _desc: &crate::RenderBundleEncoderDescriptor<'_>,
     ) -> (Self::RenderBundleEncoderId, Self::RenderBundleEncoderData) {
         todo!()
     }
 
     fn device_drop(&self, _device: &Self::DeviceId, _device_data: &Self::DeviceData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn device_set_device_lost_callback(
@@ -410,7 +418,7 @@ impl crate::Context for ContextWasiWebgpu {
     }
 
     fn queue_drop(&self, _queue: &Self::QueueId, _queue_data: &Self::QueueData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn device_poll(
@@ -419,7 +427,8 @@ impl crate::Context for ContextWasiWebgpu {
         _device_data: &Self::DeviceData,
         _maintain: crate::Maintain,
     ) -> wgt::MaintainResult {
-        todo!()
+        // Device is polled automatically
+        crate::MaintainResult::SubmissionQueueEmpty
     }
 
     fn device_on_uncaptured_error(
@@ -451,42 +460,56 @@ impl crate::Context for ContextWasiWebgpu {
     fn buffer_map_async(
         &self,
         _buffer: &Self::BufferId,
-        _buffer_data: &Self::BufferData,
-        _mode: MapMode,
-        _range: Range<wgt::BufferAddress>,
-        _callback: crate::context::BufferMapCallback,
+        buffer_data: &Self::BufferData,
+        mode: crate::MapMode,
+        range: Range<wgt::BufferAddress>,
+        callback: crate::context::BufferMapCallback,
     ) {
-        todo!()
+        // TODO: make this function async once wasi can
+        buffer_data.map_async(
+            mode.into(),
+            Some(range.start),
+            Some(range.end - range.start),
+        );
+        (callback)(Ok(()));
     }
 
     fn buffer_get_mapped_range(
         &self,
         _buffer: &Self::BufferId,
-        _buffer_data: &Self::BufferData,
-        _sub_range: Range<wgt::BufferAddress>,
+        buffer_data: &Self::BufferData,
+        sub_range: Range<wgt::BufferAddress>,
     ) -> Box<dyn crate::context::BufferMappedRange> {
-        todo!()
+        let actual_mapping =
+            buffer_data.get_mapped_range(Some(sub_range.start), Some(sub_range.end));
+        let temporary_mapping = (0..actual_mapping.length())
+            .map(|i| actual_mapping.get(i))
+            .collect();
+        Box::new(MappedBuffer {
+            actual_mapping,
+            temporary_mapping,
+        })
     }
 
-    fn buffer_unmap(&self, _buffer: &Self::BufferId, _buffer_data: &Self::BufferData) {
-        todo!()
+    fn buffer_unmap(&self, _buffer: &Self::BufferId, buffer_data: &Self::BufferData) {
+        buffer_data.unmap()
     }
 
     fn texture_create_view(
         &self,
         _texture: &Self::TextureId,
-        _texture_data: &Self::TextureData,
-        _desc: &TextureViewDescriptor<'_>,
+        texture_data: &Self::TextureData,
+        desc: &crate::TextureViewDescriptor<'_>,
     ) -> (Self::TextureViewId, Self::TextureViewData) {
-        todo!()
+        ((), texture_data.create_view(Some(&desc.into())))
     }
 
     fn surface_drop(&self, _surface: &Self::SurfaceId, _surface_data: &Self::SurfaceData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn adapter_drop(&self, _adapter: &Self::AdapterId, _adapter_data: &Self::AdapterData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn buffer_destroy(&self, _buffer: &Self::BufferId, _buffer_data: &Self::BufferData) {
@@ -494,7 +517,7 @@ impl crate::Context for ContextWasiWebgpu {
     }
 
     fn buffer_drop(&self, _buffer: &Self::BufferId, _buffer_data: &Self::BufferData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn texture_destroy(&self, _texture: &Self::TextureId, _texture_data: &Self::TextureData) {
@@ -502,7 +525,7 @@ impl crate::Context for ContextWasiWebgpu {
     }
 
     fn texture_drop(&self, _texture: &Self::TextureId, _texture_data: &Self::TextureData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn texture_view_drop(
@@ -510,15 +533,15 @@ impl crate::Context for ContextWasiWebgpu {
         _texture_view: &Self::TextureViewId,
         _texture_view_data: &Self::TextureViewData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn sampler_drop(&self, _sampler: &Self::SamplerId, _sampler_data: &Self::SamplerData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn query_set_drop(&self, _query_set: &Self::QuerySetId, _query_set_data: &Self::QuerySetData) {
-        todo!()
+        // Dropped automatically
     }
 
     fn bind_group_drop(
@@ -526,7 +549,7 @@ impl crate::Context for ContextWasiWebgpu {
         _bind_group: &Self::BindGroupId,
         _bind_group_data: &Self::BindGroupData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn bind_group_layout_drop(
@@ -534,7 +557,7 @@ impl crate::Context for ContextWasiWebgpu {
         _bind_group_layout: &Self::BindGroupLayoutId,
         _bind_group_layout_data: &Self::BindGroupLayoutData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn pipeline_layout_drop(
@@ -542,7 +565,7 @@ impl crate::Context for ContextWasiWebgpu {
         _pipeline_layout: &Self::PipelineLayoutId,
         _pipeline_layout_data: &Self::PipelineLayoutData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn shader_module_drop(
@@ -550,7 +573,7 @@ impl crate::Context for ContextWasiWebgpu {
         _shader_module: &Self::ShaderModuleId,
         _shader_module_data: &Self::ShaderModuleData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn command_encoder_drop(
@@ -558,7 +581,7 @@ impl crate::Context for ContextWasiWebgpu {
         _command_encoder: &Self::CommandEncoderId,
         _command_encoder_data: &Self::CommandEncoderData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn command_buffer_drop(
@@ -566,7 +589,7 @@ impl crate::Context for ContextWasiWebgpu {
         _command_buffer: &Self::CommandBufferId,
         _command_buffer_data: &Self::CommandBufferData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn render_bundle_drop(
@@ -574,7 +597,7 @@ impl crate::Context for ContextWasiWebgpu {
         _render_bundle: &Self::RenderBundleId,
         _render_bundle_data: &Self::RenderBundleData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn compute_pipeline_drop(
@@ -582,7 +605,7 @@ impl crate::Context for ContextWasiWebgpu {
         _pipeline: &Self::ComputePipelineId,
         _pipeline_data: &Self::ComputePipelineData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn render_pipeline_drop(
@@ -590,16 +613,16 @@ impl crate::Context for ContextWasiWebgpu {
         _pipeline: &Self::RenderPipelineId,
         _pipeline_data: &Self::RenderPipelineData,
     ) {
-        todo!()
+        // Dropped automatically
     }
 
     fn compute_pipeline_get_bind_group_layout(
         &self,
         _pipeline: &Self::ComputePipelineId,
-        _pipeline_data: &Self::ComputePipelineData,
-        _index: u32,
+        pipeline_data: &Self::ComputePipelineData,
+        index: u32,
     ) -> (Self::BindGroupLayoutId, Self::BindGroupLayoutData) {
-        todo!()
+        ((), pipeline_data.get_bind_group_layout(index))
     }
 
     fn render_pipeline_get_bind_group_layout(
@@ -614,16 +637,22 @@ impl crate::Context for ContextWasiWebgpu {
     fn command_encoder_copy_buffer_to_buffer(
         &self,
         _encoder: &Self::CommandEncoderId,
-        _encoder_data: &Self::CommandEncoderData,
+        encoder_data: &Self::CommandEncoderData,
         _source: &Self::BufferId,
-        _source_data: &Self::BufferData,
-        _source_offset: wgt::BufferAddress,
+        source_data: &Self::BufferData,
+        source_offset: wgt::BufferAddress,
         _destination: &Self::BufferId,
-        _destination_data: &Self::BufferData,
-        _destination_offset: wgt::BufferAddress,
-        _copy_size: wgt::BufferAddress,
+        destination_data: &Self::BufferData,
+        destination_offset: wgt::BufferAddress,
+        copy_size: wgt::BufferAddress,
     ) {
-        todo!()
+        encoder_data.as_ref().unwrap().copy_buffer_to_buffer(
+            source_data,
+            source_offset,
+            destination_data,
+            destination_offset,
+            copy_size,
+        );
     }
 
     fn command_encoder_copy_buffer_to_texture(
@@ -662,20 +691,31 @@ impl crate::Context for ContextWasiWebgpu {
     fn command_encoder_begin_compute_pass(
         &self,
         _encoder: &Self::CommandEncoderId,
-        _encoder_data: &Self::CommandEncoderData,
-        _desc: &ComputePassDescriptor<'_>,
+        encoder_data: &Self::CommandEncoderData,
+        desc: &crate::ComputePassDescriptor<'_>,
     ) -> (Self::ComputePassId, Self::ComputePassData) {
-        todo!()
+        (
+            (),
+            Some(
+                encoder_data
+                    .as_ref()
+                    .unwrap()
+                    .begin_compute_pass(Some(&desc.into())),
+            ),
+        )
     }
 
     fn command_encoder_end_compute_pass(
         &self,
         _encoder: &Self::CommandEncoderId,
-        _encoder_data: &Self::CommandEncoderData,
+        encoder_data: &Self::CommandEncoderData,
         _pass: &mut Self::ComputePassId,
-        _pass_data: &mut Self::ComputePassData,
+        pass_data: &mut Self::ComputePassData,
     ) {
-        todo!()
+        webgpu::GpuComputePassEncoder::end(
+            pass_data.take().unwrap(),
+            encoder_data.as_ref().unwrap(),
+        );
     }
 
     fn command_encoder_begin_render_pass(
@@ -700,16 +740,28 @@ impl crate::Context for ContextWasiWebgpu {
     fn command_encoder_finish(
         &self,
         _encoder: Self::CommandEncoderId,
-        _encoder_data: &mut Self::CommandEncoderData,
+        encoder_data: &mut Self::CommandEncoderData,
     ) -> (Self::CommandBufferId, Self::CommandBufferData) {
-        todo!()
+        let encoder_data = encoder_data.take().unwrap();
+        let label = encoder_data.label();
+        let desc = if label.is_empty() {
+            None
+        } else {
+            Some(webgpu::GpuCommandBufferDescriptor {
+                label: Some(encoder_data.label()),
+            })
+        };
+        (
+            (),
+            webgpu::GpuCommandEncoder::finish(encoder_data, desc.as_ref()),
+        )
     }
 
     fn command_encoder_clear_texture(
         &self,
         _encoder: &Self::CommandEncoderId,
         _encoder_data: &Self::CommandEncoderData,
-        _texture: &crate::Texture, // TODO: Decompose?
+        _texture: &crate::Texture,
         _subresource_range: &wgt::ImageSubresourceRange,
     ) {
         todo!()
@@ -844,25 +896,16 @@ impl crate::Context for ContextWasiWebgpu {
         todo!()
     }
 
-    // TODO: do we need this?
-    fn queue_copy_external_image_to_texture(
-        &self,
-        _queue: &Self::QueueId,
-        _queue_data: &Self::QueueData,
-        _source: &wgt::ImageCopyExternalImage,
-        _dest: crate::ImageCopyTextureTagged<'_>,
-        _size: wgt::Extent3d,
-    ) {
-        todo!()
-    }
-
     fn queue_submit<I: Iterator<Item = (Self::CommandBufferId, Self::CommandBufferData)>>(
         &self,
         _queue: &Self::QueueId,
-        _queue_data: &Self::QueueData,
-        _command_buffers: I,
+        queue_data: &Self::QueueData,
+        command_buffers: I,
     ) -> (Self::SubmissionIndex, Self::SubmissionIndexData) {
-        todo!()
+        let command_buffers = command_buffers
+            .map(|(_, command_buffer)| command_buffer)
+            .collect();
+        ((), queue_data.submit(command_buffers))
     }
 
     fn queue_get_timestamp_period(
@@ -893,23 +936,26 @@ impl crate::Context for ContextWasiWebgpu {
     fn compute_pass_set_pipeline(
         &self,
         _pass: &mut Self::ComputePassId,
-        _pass_data: &mut Self::ComputePassData,
+        pass_data: &mut Self::ComputePassData,
         _pipeline: &Self::ComputePipelineId,
-        _pipeline_data: &Self::ComputePipelineData,
+        pipeline_data: &Self::ComputePipelineData,
     ) {
-        todo!()
+        pass_data.as_ref().unwrap().set_pipeline(pipeline_data);
     }
 
     fn compute_pass_set_bind_group(
         &self,
         _pass: &mut Self::ComputePassId,
-        _pass_data: &mut Self::ComputePassData,
-        _index: u32,
+        pass_data: &mut Self::ComputePassData,
+        index: u32,
         _bind_group: &Self::BindGroupId,
-        _bind_group_data: &Self::BindGroupData,
-        _offsets: &[wgt::DynamicOffset],
+        bind_group_data: &Self::BindGroupData,
+        offsets: &[wgt::DynamicOffset],
     ) {
-        todo!()
+        pass_data
+            .as_ref()
+            .unwrap()
+            .set_bind_group(index, bind_group_data, Some(offsets));
     }
 
     fn compute_pass_set_push_constants(
@@ -925,10 +971,10 @@ impl crate::Context for ContextWasiWebgpu {
     fn compute_pass_insert_debug_marker(
         &self,
         _pass: &mut Self::ComputePassId,
-        _pass_data: &mut Self::ComputePassData,
-        _label: &str,
+        pass_data: &mut Self::ComputePassData,
+        label: &str,
     ) {
-        todo!()
+        pass_data.as_ref().unwrap().insert_debug_marker(label);
     }
 
     fn compute_pass_push_debug_group(
@@ -981,12 +1027,15 @@ impl crate::Context for ContextWasiWebgpu {
     fn compute_pass_dispatch_workgroups(
         &self,
         _pass: &mut Self::ComputePassId,
-        _pass_data: &mut Self::ComputePassData,
-        _x: u32,
-        _y: u32,
-        _z: u32,
+        pass_data: &mut Self::ComputePassData,
+        x: u32,
+        y: u32,
+        z: u32,
     ) {
-        todo!()
+        pass_data
+            .as_ref()
+            .unwrap()
+            .dispatch_workgroups(x, Some(y), Some(z));
     }
 
     fn compute_pass_dispatch_workgroups_indirect(
@@ -1436,5 +1485,1013 @@ impl crate::Context for ContextWasiWebgpu {
         _render_bundles: &mut dyn Iterator<Item = (Self::RenderBundleId, &Self::RenderBundleData)>,
     ) {
         todo!()
+    }
+}
+
+// inefficient, since `temporary_mapping`` needs to be copied to `actual_mapping`.
+// only needed becuase the `BufferMappedRange` trait methods return slices. If we change them to return `impl SliceIndex` we can get rid of this indirection.
+#[derive(Debug)]
+pub struct MappedBuffer {
+    actual_mapping: webgpu::RemoteBuffer,
+    temporary_mapping: Vec<u8>,
+}
+
+impl crate::context::BufferMappedRange for MappedBuffer {
+    #[inline]
+    fn slice(&self) -> &[u8] {
+        &self.temporary_mapping
+    }
+
+    #[inline]
+    fn slice_mut(&mut self) -> &mut [u8] {
+        &mut self.temporary_mapping
+    }
+}
+
+impl Drop for MappedBuffer {
+    fn drop(&mut self) {
+        // Copy from the temporary mapping back into the array buffer that was
+        // originally provided by the runtime
+
+        // TODO: use RemoteBuffer.set_range once available
+        for (i, byte) in self.temporary_mapping.iter().enumerate() {
+            self.actual_mapping.set(i as u32, *byte);
+        }
+    }
+}
+
+const FEATURES_MAPPING: [(wgt::Features, webgpu::GpuFeatureName); 11] = [
+    (
+        wgt::Features::DEPTH_CLIP_CONTROL,
+        webgpu::GpuFeatureName::DepthClipControl,
+    ),
+    (
+        wgt::Features::DEPTH32FLOAT_STENCIL8,
+        webgpu::GpuFeatureName::Depth32floatStencil8,
+    ),
+    (
+        wgt::Features::TEXTURE_COMPRESSION_BC,
+        webgpu::GpuFeatureName::TextureCompressionBc,
+    ),
+    (
+        wgt::Features::TEXTURE_COMPRESSION_ETC2,
+        webgpu::GpuFeatureName::TextureCompressionEtc2,
+    ),
+    (
+        wgt::Features::TEXTURE_COMPRESSION_ASTC,
+        webgpu::GpuFeatureName::TextureCompressionAstc,
+    ),
+    (
+        wgt::Features::TIMESTAMP_QUERY,
+        webgpu::GpuFeatureName::TimestampQuery,
+    ),
+    (
+        wgt::Features::INDIRECT_FIRST_INSTANCE,
+        webgpu::GpuFeatureName::IndirectFirstInstance,
+    ),
+    (wgt::Features::SHADER_F16, webgpu::GpuFeatureName::ShaderF16),
+    (
+        wgt::Features::RG11B10UFLOAT_RENDERABLE,
+        webgpu::GpuFeatureName::Rg11b10ufloatRenderable,
+    ),
+    (
+        wgt::Features::BGRA8UNORM_STORAGE,
+        webgpu::GpuFeatureName::Bgra8unormStorage,
+    ),
+    (
+        wgt::Features::FLOAT32_FILTERABLE,
+        webgpu::GpuFeatureName::Float32Filterable,
+    ),
+];
+
+fn map_wgt_features(supported_features: webgpu::GpuSupportedFeatures) -> wgt::Features {
+    let mut features = wgt::Features::empty();
+    for (wgpu_feat, wasi_feat) in FEATURES_MAPPING {
+        if supported_features.has(wasi_feat) {
+            features |= wgpu_feat;
+        }
+    }
+    features
+}
+
+fn map_wgt_limits(limits: webgpu::GpuSupportedLimits) -> wgt::Limits {
+    wgt::Limits {
+        max_texture_dimension_1d: limits.max_texture_dimension1_d(),
+        max_texture_dimension_2d: limits.max_texture_dimension2_d(),
+        max_texture_dimension_3d: limits.max_texture_dimension3_d(),
+        max_texture_array_layers: limits.max_texture_array_layers(),
+        max_bind_groups: limits.max_bind_groups(),
+        max_bindings_per_bind_group: limits.max_bindings_per_bind_group(),
+        max_dynamic_uniform_buffers_per_pipeline_layout: limits
+            .max_dynamic_uniform_buffers_per_pipeline_layout(),
+        max_dynamic_storage_buffers_per_pipeline_layout: limits
+            .max_dynamic_storage_buffers_per_pipeline_layout(),
+        max_sampled_textures_per_shader_stage: limits.max_sampled_textures_per_shader_stage(),
+        max_samplers_per_shader_stage: limits.max_samplers_per_shader_stage(),
+        max_storage_buffers_per_shader_stage: limits.max_storage_buffers_per_shader_stage(),
+        max_storage_textures_per_shader_stage: limits.max_storage_textures_per_shader_stage(),
+        max_uniform_buffers_per_shader_stage: limits.max_uniform_buffers_per_shader_stage(),
+        max_uniform_buffer_binding_size: limits.max_uniform_buffer_binding_size() as u32,
+        max_storage_buffer_binding_size: limits.max_storage_buffer_binding_size() as u32,
+        max_vertex_buffers: limits.max_vertex_buffers(),
+        max_buffer_size: limits.max_buffer_size() as u64,
+        max_vertex_attributes: limits.max_vertex_attributes(),
+        max_vertex_buffer_array_stride: limits.max_vertex_buffer_array_stride(),
+        min_uniform_buffer_offset_alignment: limits.min_uniform_buffer_offset_alignment(),
+        min_storage_buffer_offset_alignment: limits.min_storage_buffer_offset_alignment(),
+        max_inter_stage_shader_components: limits.max_inter_stage_shader_components(),
+        max_compute_workgroup_storage_size: limits.max_compute_workgroup_storage_size(),
+        max_compute_invocations_per_workgroup: limits.max_compute_invocations_per_workgroup(),
+        max_compute_workgroup_size_x: limits.max_compute_workgroup_size_x(),
+        max_compute_workgroup_size_y: limits.max_compute_workgroup_size_y(),
+        max_compute_workgroup_size_z: limits.max_compute_workgroup_size_z(),
+        max_compute_workgroups_per_dimension: limits.max_compute_workgroups_per_dimension(),
+        // The following are not part of WebGPU
+        max_push_constant_size: wgt::Limits::default().max_push_constant_size,
+        max_non_sampler_bindings: wgt::Limits::default().max_non_sampler_bindings,
+    }
+}
+
+// type conversions
+
+impl From<crate::VertexFormat> for webgpu::GpuVertexFormat {
+    fn from(value: crate::VertexFormat) -> Self {
+        match value {
+            wgt::VertexFormat::Uint8x2 => webgpu::GpuVertexFormat::Uint8x2,
+            wgt::VertexFormat::Uint8x4 => webgpu::GpuVertexFormat::Uint8x4,
+            wgt::VertexFormat::Sint8x2 => webgpu::GpuVertexFormat::Sint8x2,
+            wgt::VertexFormat::Sint8x4 => webgpu::GpuVertexFormat::Sint8x4,
+            wgt::VertexFormat::Unorm8x2 => webgpu::GpuVertexFormat::Unorm8x2,
+            wgt::VertexFormat::Unorm8x4 => webgpu::GpuVertexFormat::Unorm8x4,
+            wgt::VertexFormat::Snorm8x2 => webgpu::GpuVertexFormat::Snorm8x2,
+            wgt::VertexFormat::Snorm8x4 => webgpu::GpuVertexFormat::Snorm8x4,
+            wgt::VertexFormat::Uint16x2 => webgpu::GpuVertexFormat::Uint16x2,
+            wgt::VertexFormat::Uint16x4 => webgpu::GpuVertexFormat::Uint16x4,
+            wgt::VertexFormat::Sint16x2 => webgpu::GpuVertexFormat::Sint16x2,
+            wgt::VertexFormat::Sint16x4 => webgpu::GpuVertexFormat::Sint16x4,
+            wgt::VertexFormat::Unorm16x2 => webgpu::GpuVertexFormat::Unorm16x2,
+            wgt::VertexFormat::Unorm16x4 => webgpu::GpuVertexFormat::Unorm16x4,
+            wgt::VertexFormat::Snorm16x2 => webgpu::GpuVertexFormat::Snorm16x2,
+            wgt::VertexFormat::Snorm16x4 => webgpu::GpuVertexFormat::Snorm16x4,
+            wgt::VertexFormat::Float16x2 => webgpu::GpuVertexFormat::Float16x2,
+            wgt::VertexFormat::Float16x4 => webgpu::GpuVertexFormat::Float16x4,
+            wgt::VertexFormat::Float32 => webgpu::GpuVertexFormat::Float32,
+            wgt::VertexFormat::Float32x2 => webgpu::GpuVertexFormat::Float32x2,
+            wgt::VertexFormat::Float32x3 => webgpu::GpuVertexFormat::Float32x3,
+            wgt::VertexFormat::Float32x4 => webgpu::GpuVertexFormat::Float32x4,
+            wgt::VertexFormat::Uint32 => webgpu::GpuVertexFormat::Uint32,
+            wgt::VertexFormat::Uint32x2 => webgpu::GpuVertexFormat::Uint32x2,
+            wgt::VertexFormat::Uint32x3 => webgpu::GpuVertexFormat::Uint32x3,
+            wgt::VertexFormat::Uint32x4 => webgpu::GpuVertexFormat::Uint32x4,
+            wgt::VertexFormat::Sint32 => webgpu::GpuVertexFormat::Sint32,
+            wgt::VertexFormat::Sint32x2 => webgpu::GpuVertexFormat::Sint32x2,
+            wgt::VertexFormat::Sint32x3 => webgpu::GpuVertexFormat::Sint32x3,
+            wgt::VertexFormat::Sint32x4 => webgpu::GpuVertexFormat::Sint32x4,
+            wgt::VertexFormat::Float64
+            | wgt::VertexFormat::Float64x2
+            | wgt::VertexFormat::Float64x3
+            | wgt::VertexFormat::Float64x4 => {
+                panic!("VERTEX_ATTRIBUTE_64BIT feature must be enabled to use Double formats")
+            }
+        }
+    }
+}
+
+impl From<crate::VertexStepMode> for webgpu::GpuVertexStepMode {
+    fn from(value: crate::VertexStepMode) -> Self {
+        match value {
+            wgt::VertexStepMode::Vertex => webgpu::GpuVertexStepMode::Vertex,
+            wgt::VertexStepMode::Instance => webgpu::GpuVertexStepMode::Instance,
+        }
+    }
+}
+
+impl From<crate::FrontFace> for webgpu::GpuFrontFace {
+    fn from(value: crate::FrontFace) -> Self {
+        match value {
+            wgt::FrontFace::Ccw => webgpu::GpuFrontFace::Ccw,
+            wgt::FrontFace::Cw => webgpu::GpuFrontFace::Cw,
+        }
+    }
+}
+
+impl From<crate::PrimitiveTopology> for webgpu::GpuPrimitiveTopology {
+    fn from(value: crate::PrimitiveTopology) -> Self {
+        match value {
+            wgt::PrimitiveTopology::PointList => webgpu::GpuPrimitiveTopology::PointList,
+            wgt::PrimitiveTopology::LineList => webgpu::GpuPrimitiveTopology::LineList,
+            wgt::PrimitiveTopology::LineStrip => webgpu::GpuPrimitiveTopology::LineStrip,
+            wgt::PrimitiveTopology::TriangleList => webgpu::GpuPrimitiveTopology::TriangleList,
+            wgt::PrimitiveTopology::TriangleStrip => webgpu::GpuPrimitiveTopology::TriangleStrip,
+        }
+    }
+}
+
+impl From<crate::IndexFormat> for webgpu::GpuIndexFormat {
+    fn from(value: crate::IndexFormat) -> Self {
+        match value {
+            wgt::IndexFormat::Uint16 => webgpu::GpuIndexFormat::Uint16,
+            wgt::IndexFormat::Uint32 => webgpu::GpuIndexFormat::Uint32,
+        }
+    }
+}
+
+impl From<crate::TextureDimension> for webgpu::GpuTextureDimension {
+    fn from(value: crate::TextureDimension) -> Self {
+        match value {
+            wgt::TextureDimension::D1 => webgpu::GpuTextureDimension::OneD,
+            wgt::TextureDimension::D2 => webgpu::GpuTextureDimension::TwoD,
+            wgt::TextureDimension::D3 => webgpu::GpuTextureDimension::ThreeD,
+        }
+    }
+}
+
+impl From<crate::MapMode> for webgpu::GpuMapModeFlags {
+    fn from(value: crate::MapMode) -> Self {
+        match value {
+            crate::MapMode::Read => 0,
+            crate::MapMode::Write => 1,
+        }
+    }
+}
+
+impl From<crate::TextureFormat> for webgpu::GpuTextureFormat {
+    fn from(value: crate::TextureFormat) -> Self {
+        match value {
+            wgt::TextureFormat::R8Unorm => webgpu::GpuTextureFormat::R8unorm,
+            wgt::TextureFormat::R8Snorm => webgpu::GpuTextureFormat::R8snorm,
+            wgt::TextureFormat::R8Uint => webgpu::GpuTextureFormat::R8uint,
+            wgt::TextureFormat::R8Sint => webgpu::GpuTextureFormat::R8sint,
+            wgt::TextureFormat::R16Uint => webgpu::GpuTextureFormat::R16uint,
+            wgt::TextureFormat::R16Sint => webgpu::GpuTextureFormat::R16sint,
+            wgt::TextureFormat::R16Float => webgpu::GpuTextureFormat::R16float,
+            wgt::TextureFormat::Rg8Unorm => webgpu::GpuTextureFormat::Rg8unorm,
+            wgt::TextureFormat::Rg8Snorm => webgpu::GpuTextureFormat::Rg8snorm,
+            wgt::TextureFormat::Rg8Uint => webgpu::GpuTextureFormat::Rg8uint,
+            wgt::TextureFormat::Rg8Sint => webgpu::GpuTextureFormat::Rg8sint,
+            wgt::TextureFormat::R32Uint => webgpu::GpuTextureFormat::R32uint,
+            wgt::TextureFormat::R32Sint => webgpu::GpuTextureFormat::R32sint,
+            wgt::TextureFormat::R32Float => webgpu::GpuTextureFormat::R32float,
+            wgt::TextureFormat::Rg16Uint => webgpu::GpuTextureFormat::Rg16uint,
+            wgt::TextureFormat::Rg16Sint => webgpu::GpuTextureFormat::Rg16sint,
+            wgt::TextureFormat::Rg16Float => webgpu::GpuTextureFormat::Rg16float,
+            wgt::TextureFormat::Rgba8Unorm => webgpu::GpuTextureFormat::Rgba8unorm,
+            wgt::TextureFormat::Rgba8UnormSrgb => webgpu::GpuTextureFormat::Rgba8unormSrgb,
+            wgt::TextureFormat::Rgba8Snorm => webgpu::GpuTextureFormat::Rgba8snorm,
+            wgt::TextureFormat::Rgba8Uint => webgpu::GpuTextureFormat::Rgba8uint,
+            wgt::TextureFormat::Rgba8Sint => webgpu::GpuTextureFormat::Rgba8sint,
+            wgt::TextureFormat::Bgra8Unorm => webgpu::GpuTextureFormat::Bgra8unorm,
+            wgt::TextureFormat::Bgra8UnormSrgb => webgpu::GpuTextureFormat::Bgra8unormSrgb,
+            wgt::TextureFormat::Rgb9e5Ufloat => webgpu::GpuTextureFormat::Rgb9e5ufloat,
+            wgt::TextureFormat::Rgb10a2Uint => webgpu::GpuTextureFormat::Rgb10a2uint,
+            wgt::TextureFormat::Rgb10a2Unorm => webgpu::GpuTextureFormat::Rgb10a2unorm,
+            wgt::TextureFormat::Rg11b10Float => webgpu::GpuTextureFormat::Rg11b10ufloat,
+            wgt::TextureFormat::Rg32Uint => webgpu::GpuTextureFormat::Rg32uint,
+            wgt::TextureFormat::Rg32Sint => webgpu::GpuTextureFormat::Rg32sint,
+            wgt::TextureFormat::Rg32Float => webgpu::GpuTextureFormat::Rg32float,
+            wgt::TextureFormat::Rgba16Uint => webgpu::GpuTextureFormat::Rgba16uint,
+            wgt::TextureFormat::Rgba16Sint => webgpu::GpuTextureFormat::Rgba16sint,
+            wgt::TextureFormat::Rgba16Float => webgpu::GpuTextureFormat::Rgba16float,
+            wgt::TextureFormat::Rgba32Uint => webgpu::GpuTextureFormat::Rgba32uint,
+            wgt::TextureFormat::Rgba32Sint => webgpu::GpuTextureFormat::Rgba32sint,
+            wgt::TextureFormat::Rgba32Float => webgpu::GpuTextureFormat::Rgba32float,
+            wgt::TextureFormat::Stencil8 => webgpu::GpuTextureFormat::Stencil8,
+            wgt::TextureFormat::Depth16Unorm => webgpu::GpuTextureFormat::Depth16unorm,
+            wgt::TextureFormat::Depth24Plus => webgpu::GpuTextureFormat::Depth24plus,
+            wgt::TextureFormat::Depth24PlusStencil8 => {
+                webgpu::GpuTextureFormat::Depth24plusStencil8
+            }
+            wgt::TextureFormat::Depth32Float => webgpu::GpuTextureFormat::Depth32float,
+            wgt::TextureFormat::Depth32FloatStencil8 => {
+                webgpu::GpuTextureFormat::Depth32floatStencil8
+            }
+            wgt::TextureFormat::Bc1RgbaUnorm => webgpu::GpuTextureFormat::Bc1RgbaUnorm,
+            wgt::TextureFormat::Bc1RgbaUnormSrgb => webgpu::GpuTextureFormat::Bc1RgbaUnormSrgb,
+            wgt::TextureFormat::Bc2RgbaUnorm => webgpu::GpuTextureFormat::Bc2RgbaUnorm,
+            wgt::TextureFormat::Bc2RgbaUnormSrgb => webgpu::GpuTextureFormat::Bc2RgbaUnormSrgb,
+            wgt::TextureFormat::Bc3RgbaUnorm => webgpu::GpuTextureFormat::Bc3RgbaUnorm,
+            wgt::TextureFormat::Bc3RgbaUnormSrgb => webgpu::GpuTextureFormat::Bc3RgbaUnormSrgb,
+            wgt::TextureFormat::Bc4RUnorm => webgpu::GpuTextureFormat::Bc4RUnorm,
+            wgt::TextureFormat::Bc4RSnorm => webgpu::GpuTextureFormat::Bc4RSnorm,
+            wgt::TextureFormat::Bc5RgUnorm => webgpu::GpuTextureFormat::Bc5RgUnorm,
+            wgt::TextureFormat::Bc5RgSnorm => webgpu::GpuTextureFormat::Bc5RgSnorm,
+            wgt::TextureFormat::Bc6hRgbUfloat => webgpu::GpuTextureFormat::Bc6hRgbUfloat,
+            wgt::TextureFormat::Bc6hRgbFloat => webgpu::GpuTextureFormat::Bc6hRgbFloat,
+            wgt::TextureFormat::Bc7RgbaUnorm => webgpu::GpuTextureFormat::Bc7RgbaUnorm,
+            wgt::TextureFormat::Bc7RgbaUnormSrgb => webgpu::GpuTextureFormat::Bc7RgbaUnormSrgb,
+            wgt::TextureFormat::Etc2Rgb8Unorm => webgpu::GpuTextureFormat::Etc2Rgb8unorm,
+            wgt::TextureFormat::Etc2Rgb8UnormSrgb => webgpu::GpuTextureFormat::Etc2Rgb8unormSrgb,
+            wgt::TextureFormat::Etc2Rgb8A1Unorm => webgpu::GpuTextureFormat::Etc2Rgb8a1unorm,
+            wgt::TextureFormat::Etc2Rgb8A1UnormSrgb => {
+                webgpu::GpuTextureFormat::Etc2Rgb8a1unormSrgb
+            }
+            wgt::TextureFormat::Etc2Rgba8Unorm => webgpu::GpuTextureFormat::Etc2Rgba8unorm,
+            wgt::TextureFormat::Etc2Rgba8UnormSrgb => webgpu::GpuTextureFormat::Etc2Rgba8unormSrgb,
+            wgt::TextureFormat::EacR11Unorm => webgpu::GpuTextureFormat::EacR11unorm,
+            wgt::TextureFormat::EacR11Snorm => webgpu::GpuTextureFormat::EacR11snorm,
+            wgt::TextureFormat::EacRg11Unorm => webgpu::GpuTextureFormat::EacRg11unorm,
+            wgt::TextureFormat::EacRg11Snorm => webgpu::GpuTextureFormat::EacRg11snorm,
+            wgt::TextureFormat::Astc { block, channel } => match channel {
+                wgt::AstcChannel::Unorm => match block {
+                    wgt::AstcBlock::B4x4 => webgpu::GpuTextureFormat::Astc4x4Unorm,
+                    wgt::AstcBlock::B5x4 => webgpu::GpuTextureFormat::Astc5x4Unorm,
+                    wgt::AstcBlock::B5x5 => webgpu::GpuTextureFormat::Astc5x5Unorm,
+                    wgt::AstcBlock::B6x5 => webgpu::GpuTextureFormat::Astc6x5Unorm,
+                    wgt::AstcBlock::B6x6 => webgpu::GpuTextureFormat::Astc6x6Unorm,
+                    wgt::AstcBlock::B8x5 => webgpu::GpuTextureFormat::Astc8x5Unorm,
+                    wgt::AstcBlock::B8x6 => webgpu::GpuTextureFormat::Astc8x6Unorm,
+                    wgt::AstcBlock::B8x8 => webgpu::GpuTextureFormat::Astc8x8Unorm,
+                    wgt::AstcBlock::B10x5 => webgpu::GpuTextureFormat::Astc10x5Unorm,
+                    wgt::AstcBlock::B10x6 => webgpu::GpuTextureFormat::Astc10x6Unorm,
+                    wgt::AstcBlock::B10x8 => webgpu::GpuTextureFormat::Astc10x8Unorm,
+                    wgt::AstcBlock::B10x10 => webgpu::GpuTextureFormat::Astc10x10Unorm,
+                    wgt::AstcBlock::B12x10 => webgpu::GpuTextureFormat::Astc12x10Unorm,
+                    wgt::AstcBlock::B12x12 => webgpu::GpuTextureFormat::Astc12x12Unorm,
+                },
+                wgt::AstcChannel::UnormSrgb => match block {
+                    wgt::AstcBlock::B4x4 => webgpu::GpuTextureFormat::Astc4x4UnormSrgb,
+                    wgt::AstcBlock::B5x4 => webgpu::GpuTextureFormat::Astc5x4UnormSrgb,
+                    wgt::AstcBlock::B5x5 => webgpu::GpuTextureFormat::Astc5x5UnormSrgb,
+                    wgt::AstcBlock::B6x5 => webgpu::GpuTextureFormat::Astc6x5UnormSrgb,
+                    wgt::AstcBlock::B6x6 => webgpu::GpuTextureFormat::Astc6x6UnormSrgb,
+                    wgt::AstcBlock::B8x5 => webgpu::GpuTextureFormat::Astc8x5UnormSrgb,
+                    wgt::AstcBlock::B8x6 => webgpu::GpuTextureFormat::Astc8x6UnormSrgb,
+                    wgt::AstcBlock::B8x8 => webgpu::GpuTextureFormat::Astc8x8UnormSrgb,
+                    wgt::AstcBlock::B10x5 => webgpu::GpuTextureFormat::Astc10x5UnormSrgb,
+                    wgt::AstcBlock::B10x6 => webgpu::GpuTextureFormat::Astc10x6UnormSrgb,
+                    wgt::AstcBlock::B10x8 => webgpu::GpuTextureFormat::Astc10x8UnormSrgb,
+                    wgt::AstcBlock::B10x10 => webgpu::GpuTextureFormat::Astc10x10UnormSrgb,
+                    wgt::AstcBlock::B12x10 => webgpu::GpuTextureFormat::Astc12x10UnormSrgb,
+                    wgt::AstcBlock::B12x12 => webgpu::GpuTextureFormat::Astc12x12UnormSrgb,
+                },
+                wgt::AstcChannel::Hdr => {
+                    unimplemented!("Format {value:?} has no WebGPU equivilant")
+                }
+            },
+            wgt::TextureFormat::R16Unorm
+            | wgt::TextureFormat::R16Snorm
+            | wgt::TextureFormat::Rg16Unorm
+            | wgt::TextureFormat::Rg16Snorm
+            | wgt::TextureFormat::Rgba16Unorm
+            | wgt::TextureFormat::Rgba16Snorm
+            | wgt::TextureFormat::NV12 => {
+                unimplemented!("Format {value:?} has no WebGPU equivilant")
+            }
+        }
+    }
+}
+
+impl From<crate::FilterMode> for webgpu::GpuFilterMode {
+    fn from(value: crate::FilterMode) -> Self {
+        match value {
+            wgt::FilterMode::Nearest => webgpu::GpuFilterMode::Nearest,
+            wgt::FilterMode::Linear => webgpu::GpuFilterMode::Linear,
+        }
+    }
+}
+
+impl From<crate::FilterMode> for webgpu::GpuMipmapFilterMode {
+    fn from(value: crate::FilterMode) -> Self {
+        match value {
+            wgt::FilterMode::Nearest => webgpu::GpuMipmapFilterMode::Nearest,
+            wgt::FilterMode::Linear => webgpu::GpuMipmapFilterMode::Linear,
+        }
+    }
+}
+
+impl From<crate::AddressMode> for webgpu::GpuAddressMode {
+    fn from(value: crate::AddressMode) -> Self {
+        match value {
+            wgt::AddressMode::ClampToEdge => webgpu::GpuAddressMode::ClampToEdge,
+            wgt::AddressMode::Repeat => webgpu::GpuAddressMode::Repeat,
+            wgt::AddressMode::MirrorRepeat => webgpu::GpuAddressMode::MirrorRepeat,
+            wgt::AddressMode::ClampToBorder => panic!("Clamp to border is not supported"),
+        }
+    }
+}
+
+impl From<crate::CompareFunction> for webgpu::GpuCompareFunction {
+    fn from(value: crate::CompareFunction) -> Self {
+        match value {
+            wgt::CompareFunction::Never => webgpu::GpuCompareFunction::Never,
+            wgt::CompareFunction::Less => webgpu::GpuCompareFunction::Less,
+            wgt::CompareFunction::Equal => webgpu::GpuCompareFunction::Equal,
+            wgt::CompareFunction::LessEqual => webgpu::GpuCompareFunction::LessEqual,
+            wgt::CompareFunction::Greater => webgpu::GpuCompareFunction::Greater,
+            wgt::CompareFunction::NotEqual => webgpu::GpuCompareFunction::NotEqual,
+            wgt::CompareFunction::GreaterEqual => webgpu::GpuCompareFunction::GreaterEqual,
+            wgt::CompareFunction::Always => webgpu::GpuCompareFunction::Always,
+        }
+    }
+}
+
+impl From<crate::SamplerBindingType> for webgpu::GpuSamplerBindingType {
+    fn from(value: crate::SamplerBindingType) -> Self {
+        match value {
+            wgt::SamplerBindingType::Filtering => webgpu::GpuSamplerBindingType::Filtering,
+            wgt::SamplerBindingType::NonFiltering => webgpu::GpuSamplerBindingType::NonFiltering,
+            wgt::SamplerBindingType::Comparison => webgpu::GpuSamplerBindingType::Comparison,
+        }
+    }
+}
+
+impl From<crate::TextureSampleType> for webgpu::GpuTextureSampleType {
+    fn from(value: crate::TextureSampleType) -> Self {
+        match value {
+            wgt::TextureSampleType::Float { filterable: true } => {
+                webgpu::GpuTextureSampleType::Depth
+            }
+            wgt::TextureSampleType::Float { filterable: false } => {
+                webgpu::GpuTextureSampleType::UnfilterableFloat
+            }
+            wgt::TextureSampleType::Depth => webgpu::GpuTextureSampleType::Depth,
+            wgt::TextureSampleType::Sint => webgpu::GpuTextureSampleType::Sint,
+            wgt::TextureSampleType::Uint => webgpu::GpuTextureSampleType::Uint,
+        }
+    }
+}
+
+impl From<crate::TextureViewDimension> for webgpu::GpuTextureViewDimension {
+    fn from(value: crate::TextureViewDimension) -> Self {
+        match value {
+            wgt::TextureViewDimension::D1 => webgpu::GpuTextureViewDimension::OneD,
+            wgt::TextureViewDimension::D2 => webgpu::GpuTextureViewDimension::TwoD,
+            wgt::TextureViewDimension::D2Array => webgpu::GpuTextureViewDimension::TwoDArray,
+            wgt::TextureViewDimension::Cube => webgpu::GpuTextureViewDimension::Cube,
+            wgt::TextureViewDimension::CubeArray => webgpu::GpuTextureViewDimension::CubeArray,
+            wgt::TextureViewDimension::D3 => webgpu::GpuTextureViewDimension::ThreeD,
+        }
+    }
+}
+
+impl From<crate::BlendFactor> for webgpu::GpuBlendFactor {
+    fn from(value: crate::BlendFactor) -> Self {
+        match value {
+            wgt::BlendFactor::Zero => webgpu::GpuBlendFactor::Zero,
+            wgt::BlendFactor::One => webgpu::GpuBlendFactor::One,
+            wgt::BlendFactor::Src => webgpu::GpuBlendFactor::Src,
+            wgt::BlendFactor::OneMinusSrc => webgpu::GpuBlendFactor::OneMinusSrc,
+            wgt::BlendFactor::SrcAlpha => webgpu::GpuBlendFactor::SrcAlpha,
+            wgt::BlendFactor::OneMinusSrcAlpha => webgpu::GpuBlendFactor::OneMinusSrcAlpha,
+            wgt::BlendFactor::Dst => webgpu::GpuBlendFactor::Dst,
+            wgt::BlendFactor::OneMinusDst => webgpu::GpuBlendFactor::OneMinusDst,
+            wgt::BlendFactor::DstAlpha => webgpu::GpuBlendFactor::DstAlpha,
+            wgt::BlendFactor::OneMinusDstAlpha => webgpu::GpuBlendFactor::OneMinusDstAlpha,
+            wgt::BlendFactor::SrcAlphaSaturated => webgpu::GpuBlendFactor::SrcAlphaSaturated,
+            wgt::BlendFactor::Constant => webgpu::GpuBlendFactor::Constant,
+            wgt::BlendFactor::OneMinusConstant => webgpu::GpuBlendFactor::OneMinusConstant,
+            wgt::BlendFactor::Src1
+            | wgt::BlendFactor::OneMinusSrc1
+            | wgt::BlendFactor::Src1Alpha
+            | wgt::BlendFactor::OneMinusSrc1Alpha => {
+                panic!(
+                    "{:?} is not enabled for this backend",
+                    wgt::Features::DUAL_SOURCE_BLENDING
+                )
+            }
+        }
+    }
+}
+
+impl From<crate::BlendOperation> for webgpu::GpuBlendOperation {
+    fn from(value: crate::BlendOperation) -> Self {
+        match value {
+            wgt::BlendOperation::Add => webgpu::GpuBlendOperation::Add,
+            wgt::BlendOperation::Subtract => webgpu::GpuBlendOperation::Subtract,
+            wgt::BlendOperation::ReverseSubtract => webgpu::GpuBlendOperation::ReverseSubtract,
+            wgt::BlendOperation::Min => webgpu::GpuBlendOperation::Min,
+            wgt::BlendOperation::Max => webgpu::GpuBlendOperation::Max,
+        }
+    }
+}
+
+impl From<crate::TextureAspect> for webgpu::GpuTextureAspect {
+    fn from(value: crate::TextureAspect) -> Self {
+        match value {
+            wgt::TextureAspect::All => webgpu::GpuTextureAspect::All,
+            wgt::TextureAspect::StencilOnly => webgpu::GpuTextureAspect::StencilOnly,
+            wgt::TextureAspect::DepthOnly => webgpu::GpuTextureAspect::DepthOnly,
+            wgt::TextureAspect::Plane0
+            | wgt::TextureAspect::Plane1
+            | wgt::TextureAspect::Plane2 => {
+                panic!("multi-plane textures are not supported")
+            }
+        }
+    }
+}
+
+impl From<crate::StorageTextureAccess> for webgpu::GpuStorageTextureAccess {
+    fn from(value: crate::StorageTextureAccess) -> Self {
+        match value {
+            wgt::StorageTextureAccess::WriteOnly => webgpu::GpuStorageTextureAccess::WriteOnly,
+            wgt::StorageTextureAccess::ReadOnly => webgpu::GpuStorageTextureAccess::ReadOnly,
+            wgt::StorageTextureAccess::ReadWrite => webgpu::GpuStorageTextureAccess::ReadWrite,
+        }
+    }
+}
+
+impl From<crate::StencilOperation> for webgpu::GpuStencilOperation {
+    fn from(value: crate::StencilOperation) -> Self {
+        match value {
+            wgt::StencilOperation::Keep => webgpu::GpuStencilOperation::Keep,
+            wgt::StencilOperation::Zero => webgpu::GpuStencilOperation::Zero,
+            wgt::StencilOperation::Replace => webgpu::GpuStencilOperation::Replace,
+            wgt::StencilOperation::Invert => webgpu::GpuStencilOperation::Invert,
+            wgt::StencilOperation::IncrementClamp => webgpu::GpuStencilOperation::IncrementClamp,
+            wgt::StencilOperation::DecrementClamp => webgpu::GpuStencilOperation::DecrementClamp,
+            wgt::StencilOperation::IncrementWrap => webgpu::GpuStencilOperation::IncrementWrap,
+            wgt::StencilOperation::DecrementWrap => webgpu::GpuStencilOperation::DecrementWrap,
+        }
+    }
+}
+
+impl From<crate::Face> for webgpu::GpuCullMode {
+    fn from(value: crate::Face) -> Self {
+        match value {
+            wgt::Face::Front => webgpu::GpuCullMode::Front,
+            wgt::Face::Back => webgpu::GpuCullMode::Back,
+        }
+    }
+}
+
+impl From<&crate::BlendComponent> for webgpu::GpuBlendComponent {
+    fn from(value: &crate::BlendComponent) -> Self {
+        Self {
+            src_factor: Some(value.src_factor.into()),
+            dst_factor: Some(value.dst_factor.into()),
+            operation: Some(value.operation.into()),
+        }
+    }
+}
+
+impl From<&crate::BlendState> for webgpu::GpuBlendState {
+    fn from(value: &crate::BlendState) -> Self {
+        Self {
+            color: (&value.color).into(),
+            alpha: (&value.alpha).into(),
+        }
+    }
+}
+
+impl From<&crate::ColorTargetState> for webgpu::GpuColorTargetState {
+    fn from(value: &crate::ColorTargetState) -> Self {
+        Self {
+            format: value.format.into(),
+            blend: value.blend.map(|b| (&b).into()),
+            write_mask: Some(value.write_mask.bits()),
+        }
+    }
+}
+
+impl<'a> From<&crate::FragmentState<'a>> for webgpu::GpuFragmentState<'a> {
+    fn from(value: &crate::FragmentState<'a>) -> Self {
+        Self {
+            targets: value
+                .targets
+                .iter()
+                .map(|t| t.as_ref().map(|t| t.into()))
+                .collect(),
+            module: downcast_ref(value.module.data.as_ref()),
+            entry_point: value.entry_point.into(),
+        }
+    }
+}
+
+impl From<&crate::VertexAttribute> for webgpu::GpuVertexAttribute {
+    fn from(value: &crate::VertexAttribute) -> Self {
+        Self {
+            format: value.format.into(),
+            offset: value.offset,
+            shader_location: value.shader_location,
+        }
+    }
+}
+
+impl<'a> From<&crate::VertexBufferLayout<'a>> for webgpu::GpuVertexBufferLayout {
+    fn from(value: &crate::VertexBufferLayout<'a>) -> Self {
+        Self {
+            array_stride: value.array_stride,
+            step_mode: Some(value.step_mode.into()),
+            attributes: value.attributes.iter().map(|a| a.into()).collect(),
+        }
+    }
+}
+
+impl<'a> From<&crate::VertexState<'a>> for webgpu::GpuVertexState<'a> {
+    fn from(value: &crate::VertexState<'a>) -> Self {
+        Self {
+            buffers: Some(value.buffers.iter().map(|b| b.into()).collect()),
+            module: downcast_ref(value.module.data.as_ref()),
+            entry_point: value.entry_point.into(),
+        }
+    }
+}
+
+impl From<&crate::PrimitiveState> for webgpu::GpuPrimitiveState {
+    fn from(value: &crate::PrimitiveState) -> Self {
+        Self {
+            topology: Some(value.topology.into()),
+            strip_index_format: value.strip_index_format.map(|s| s.into()),
+            front_face: Some(value.front_face.into()),
+            cull_mode: value.cull_mode.map(|cm| cm.into()),
+            unclipped_depth: Some(value.unclipped_depth),
+            // TODO: Handle `polygon_mode` and `conservative`
+        }
+    }
+}
+
+impl From<crate::Extent3d> for webgpu::GpuExtent3D {
+    fn from(value: crate::Extent3d) -> Self {
+        webgpu::GpuExtent3D::GpuExtent3DDict(webgpu::GpuExtent3DDict {
+            width: value.width,
+            height: Some(value.height),
+            depth_or_array_layers: Some(value.depth_or_array_layers),
+        })
+    }
+}
+
+impl<'a> From<&crate::BufferBinding<'a>> for webgpu::GpuBufferBinding<'a> {
+    fn from(value: &crate::BufferBinding<'a>) -> Self {
+        Self {
+            buffer: downcast_ref(value.buffer.data.as_ref()),
+            offset: Some(value.offset),
+            size: value.size.map(|s| s.try_into().unwrap()),
+        }
+    }
+}
+
+impl<'a> From<&crate::BindingResource<'a>> for webgpu::GpuBindingResource<'a> {
+    fn from(value: &crate::BindingResource<'a>) -> Self {
+        match value {
+            crate::BindingResource::Buffer(buffer) => {
+                webgpu::GpuBindingResource::GpuBufferBinding(buffer.into())
+            }
+            crate::BindingResource::BufferArray(_) => {
+                panic!("WASI backend does not support arrays of buffers")
+            }
+            crate::BindingResource::Sampler(sampler) => {
+                webgpu::GpuBindingResource::GpuSampler(downcast_ref(sampler.data.as_ref()))
+            }
+            crate::BindingResource::SamplerArray(_) => {
+                panic!("WASI backend does not support arrays of samplers")
+            }
+            crate::BindingResource::TextureView(view) => {
+                webgpu::GpuBindingResource::GpuTextureView(downcast_ref(view.data.as_ref()))
+            }
+            crate::BindingResource::TextureViewArray(_) => {
+                panic!("WASI backend does not support BINDING_INDEXING extension")
+            }
+        }
+    }
+}
+
+impl<'a> From<&crate::BindGroupEntry<'a>> for webgpu::GpuBindGroupEntry<'a> {
+    fn from(value: &crate::BindGroupEntry<'a>) -> Self {
+        webgpu::GpuBindGroupEntry {
+            binding: value.binding,
+            resource: (&value.resource).into(),
+        }
+    }
+}
+
+impl<'a> From<&crate::BindGroupLayoutEntry> for webgpu::GpuBindGroupLayoutEntry {
+    fn from(entry: &crate::BindGroupLayoutEntry) -> Self {
+        let mut mapped_entry = webgpu::GpuBindGroupLayoutEntry {
+            binding: entry.binding,
+            visibility: entry.visibility.bits(),
+            buffer: None,
+            sampler: None,
+            texture: None,
+            storage_texture: None,
+            external_texture: None,
+        };
+
+        match entry.ty {
+            wgt::BindingType::Buffer {
+                ty,
+                has_dynamic_offset,
+                min_binding_size,
+            } => {
+                mapped_entry.buffer = Some(webgpu::GpuBufferBindingLayout {
+                    type_: Some(match ty {
+                        wgt::BufferBindingType::Uniform => webgpu::GpuBufferBindingType::Uniform,
+                        wgt::BufferBindingType::Storage { read_only: true } => {
+                            webgpu::GpuBufferBindingType::ReadOnlyStorage
+                        }
+                        wgt::BufferBindingType::Storage { read_only: false } => {
+                            webgpu::GpuBufferBindingType::Storage
+                        }
+                    }),
+                    has_dynamic_offset: Some(has_dynamic_offset),
+                    min_binding_size: Some(min_binding_size.map(|i| i.try_into().unwrap()))
+                        .unwrap(),
+                });
+            }
+            wgt::BindingType::Sampler(sampler) => {
+                mapped_entry.sampler = Some(webgpu::GpuSamplerBindingLayout {
+                    type_: Some(sampler.into()),
+                });
+            }
+            wgt::BindingType::Texture {
+                sample_type,
+                view_dimension,
+                multisampled,
+            } => {
+                mapped_entry.texture = Some(webgpu::GpuTextureBindingLayout {
+                    sample_type: Some(sample_type.into()),
+                    view_dimension: view_dimension.into(),
+                    multisampled: Some(multisampled.into()),
+                });
+            }
+            wgt::BindingType::StorageTexture {
+                access,
+                format,
+                view_dimension,
+            } => {
+                mapped_entry.storage_texture = Some(webgpu::GpuStorageTextureBindingLayout {
+                    access: Some(access.into()),
+                    format: format.into(),
+                    view_dimension: view_dimension.into(),
+                });
+            }
+            wgt::BindingType::AccelerationStructure => todo!(),
+        }
+
+        mapped_entry
+    }
+}
+
+impl From<&crate::StencilFaceState> for webgpu::GpuStencilFaceState {
+    fn from(value: &crate::StencilFaceState) -> Self {
+        Self {
+            compare: Some(value.compare.into()),
+            fail_op: Some(value.fail_op.into()),
+            depth_fail_op: Some(value.depth_fail_op.into()),
+            pass_op: Some(value.pass_op.into()),
+        }
+    }
+}
+
+impl From<&crate::DepthStencilState> for webgpu::GpuDepthStencilState {
+    fn from(value: &crate::DepthStencilState) -> Self {
+        Self {
+            format: value.format.into(),
+            depth_write_enabled: Some(value.depth_write_enabled),
+            depth_compare: Some(value.depth_compare.into()),
+            stencil_front: Some((&value.stencil.front).into()),
+            stencil_back: Some((&value.stencil.back).into()),
+            stencil_read_mask: Some(value.stencil.read_mask),
+            stencil_write_mask: Some(value.stencil.write_mask),
+            depth_bias: Some(value.bias.constant),
+            depth_bias_slope_scale: Some(value.bias.slope_scale),
+            depth_bias_clamp: Some(value.bias.clamp),
+        }
+    }
+}
+
+impl From<&crate::MultisampleState> for webgpu::GpuMultisampleState {
+    fn from(value: &crate::MultisampleState) -> Self {
+        Self {
+            count: Some(value.count.into()),
+            mask: Some(value.mask as u32),
+            alpha_to_coverage_enabled: Some(value.alpha_to_coverage_enabled),
+        }
+    }
+}
+
+impl<'a> From<&crate::ComputePassTimestampWrites<'a>>
+    for webgpu::GpuComputePassTimestampWrites<'a>
+{
+    fn from(value: &crate::ComputePassTimestampWrites<'a>) -> Self {
+        Self {
+            query_set: downcast_ref(value.query_set.data.as_ref()),
+            beginning_of_pass_write_index: value.beginning_of_pass_write_index,
+            end_of_pass_write_index: value.end_of_pass_write_index,
+        }
+    }
+}
+
+impl<'a> From<&crate::ComputePassDescriptor<'a>> for webgpu::GpuComputePassDescriptor<'a> {
+    fn from(value: &crate::ComputePassDescriptor<'a>) -> Self {
+        Self {
+            label: value.label.map(|l| l.into()),
+            timestamp_writes: value.timestamp_writes.as_ref().map(|tw| tw.into()),
+        }
+    }
+}
+
+impl<'a> From<&crate::TextureViewDescriptor<'a>> for webgpu::GpuTextureViewDescriptor {
+    fn from(value: &crate::TextureViewDescriptor<'a>) -> Self {
+        Self {
+            label: value.label.map(|l| l.into()),
+            format: value.format.map(|f| f.into()),
+            dimension: value.dimension.map(|d| d.into()),
+            aspect: Some(value.aspect.into()),
+            base_mip_level: Some(value.base_mip_level),
+            mip_level_count: value.mip_level_count,
+            base_array_layer: Some(value.base_array_layer),
+            array_layer_count: value.array_layer_count,
+        }
+    }
+}
+
+impl<'a> From<&crate::CommandEncoderDescriptor<'a>> for webgpu::GpuCommandEncoderDescriptor {
+    fn from(value: &crate::CommandEncoderDescriptor<'a>) -> Self {
+        Self {
+            label: value.label.map(|l| l.into()),
+        }
+    }
+}
+
+impl<'a> From<&crate::BufferDescriptor<'a>> for webgpu::GpuBufferDescriptor {
+    fn from(value: &crate::BufferDescriptor<'a>) -> Self {
+        webgpu::GpuBufferDescriptor {
+            label: value.label.map(|l| l.into()),
+            size: value.size,
+            usage: value.usage.bits(),
+            mapped_at_creation: Some(value.mapped_at_creation),
+        }
+    }
+}
+
+impl<'a> From<&crate::ComputePipelineDescriptor<'a>> for webgpu::GpuComputePipelineDescriptor<'a> {
+    fn from(value: &crate::ComputePipelineDescriptor<'a>) -> Self {
+        Self {
+            compute: webgpu::GpuProgrammableStage {
+                module: value.module.data.downcast_ref().unwrap(),
+                entry_point: Some(value.entry_point.to_string()),
+            },
+            layout: match value.layout {
+                Some(layout) => webgpu::GpuPipelineLayoutOrGpuAutoLayoutMode::GpuPipelineLayout(
+                    layout.data.downcast_ref().unwrap(),
+                ),
+                None => webgpu::GpuPipelineLayoutOrGpuAutoLayoutMode::GpuAutoLayoutMode(
+                    webgpu::GpuAutoLayoutMode::Auto,
+                ),
+            },
+        }
+    }
+}
+
+impl<'a> From<&crate::RenderPipelineDescriptor<'a>> for webgpu::GpuRenderPipelineDescriptor<'a> {
+    fn from(value: &crate::RenderPipelineDescriptor<'a>) -> Self {
+        Self {
+            vertex: (&value.vertex).into(),
+            primitive: Some((&value.primitive).into()),
+            depth_stencil: value.depth_stencil.as_ref().map(|ds| ds.into()),
+            multisample: Some((&value.multisample).into()),
+            fragment: value.fragment.as_ref().map(|f| f.into()),
+            layout: value.layout.map(|l| downcast_ref(l.data.as_ref())),
+        }
+    }
+}
+
+impl<'a> From<&crate::PipelineLayoutDescriptor<'a>> for webgpu::GpuPipelineLayoutDescriptor<'a> {
+    fn from(value: &crate::PipelineLayoutDescriptor<'a>) -> Self {
+        webgpu::GpuPipelineLayoutDescriptor {
+            bind_group_layouts: value
+                .bind_group_layouts
+                .iter()
+                .map(|b| downcast_ref(b.data.as_ref()))
+                .collect(),
+            label: value.label.map(|l| l.into()),
+        }
+    }
+}
+
+impl<'a> From<crate::ShaderModuleDescriptor<'a>> for webgpu::GpuShaderModuleDescriptor {
+    fn from(value: crate::ShaderModuleDescriptor<'a>) -> Self {
+        let source = match value.source {
+            #[cfg(feature = "spirv")]
+            crate::ShaderSource::SpirV(ref spv) => {
+                use naga::{back, front, valid};
+
+                let options = naga::front::spv::Options {
+                    adjust_coordinate_space: false,
+                    strict_capabilities: true,
+                    block_ctx_dump_prefix: None,
+                };
+                let spv_parser = front::spv::Frontend::new(spv.iter().cloned(), &options);
+                let spv_module = spv_parser.parse().unwrap();
+
+                let mut validator = valid::Validator::new(
+                    valid::ValidationFlags::all(),
+                    valid::Capabilities::all(),
+                );
+                let spv_module_info = validator.validate(&spv_module).unwrap();
+
+                let writer_flags = naga::back::wgsl::WriterFlags::empty();
+                let wgsl_text =
+                    back::wgsl::write_string(&spv_module, &spv_module_info, writer_flags).unwrap();
+                wgsl_text
+            }
+            #[cfg(feature = "glsl")]
+            crate::ShaderSource::Glsl {
+                ref shader,
+                stage,
+                ref defines,
+            } => {
+                use naga::{back, front, valid};
+
+                // Parse the given shader code and store its representation.
+                let options = front::glsl::Options {
+                    stage,
+                    defines: defines.clone(),
+                };
+                let mut parser = front::glsl::Frontend::default();
+                let glsl_module = parser.parse(&options, shader).unwrap();
+
+                let mut validator = valid::Validator::new(
+                    valid::ValidationFlags::all(),
+                    valid::Capabilities::all(),
+                );
+                let glsl_module_info = validator.validate(&glsl_module).unwrap();
+
+                let writer_flags = naga::back::wgsl::WriterFlags::empty();
+                let wgsl_text =
+                    back::wgsl::write_string(&glsl_module, &glsl_module_info, writer_flags)
+                        .unwrap();
+                wgsl_text
+            }
+            #[cfg(feature = "wgsl")]
+            crate::ShaderSource::Wgsl(ref code) => code.to_string(),
+            #[cfg(feature = "naga-ir")]
+            crate::ShaderSource::Naga(module) => {
+                use naga::{back, valid};
+
+                let mut validator = valid::Validator::new(
+                    valid::ValidationFlags::all(),
+                    valid::Capabilities::all(),
+                );
+                let module_info = validator.validate(&module).unwrap();
+
+                let writer_flags = naga::back::wgsl::WriterFlags::empty();
+                let wgsl_text =
+                    back::wgsl::write_string(&module, &module_info, writer_flags).unwrap();
+                wgsl_text
+            }
+            crate::ShaderSource::Dummy(_) => {
+                panic!("found `ShaderSource::Dummy`")
+            }
+        };
+        Self {
+            label: value.label.map(|l| l.into()),
+            code: source,
+            // TODO: pass the correct value
+            compilation_hints: None,
+        }
+    }
+}
+
+impl<'a> From<&crate::TextureDescriptor<'a>> for webgpu::GpuTextureDescriptor {
+    fn from(value: &crate::TextureDescriptor<'a>) -> Self {
+        Self {
+            label: value.label.map(|l| l.into()),
+            size: value.size.into(),
+            mip_level_count: Some(value.mip_level_count),
+            sample_count: Some(value.sample_count),
+            dimension: value.dimension.into(),
+            format: value.format.into(),
+            usage: value.usage.bits(),
+            view_formats: Some(value.view_formats.iter().map(|f| (*f).into()).collect()),
+        }
+    }
+}
+
+impl<'a> From<&crate::SamplerDescriptor<'a>> for webgpu::GpuSamplerDescriptor {
+    fn from(value: &crate::SamplerDescriptor<'a>) -> Self {
+        webgpu::GpuSamplerDescriptor {
+            label: value.label.map(|l| l.into()),
+            address_mode_u: Some(value.address_mode_u.into()),
+            address_mode_v: Some(value.address_mode_v.into()),
+            address_mode_w: Some(value.address_mode_w.into()),
+            mag_filter: Some(value.mag_filter.into()),
+            min_filter: Some(value.min_filter.into()),
+            mipmap_filter: Some(value.mipmap_filter.into()),
+            lod_min_clamp: Some(value.lod_min_clamp),
+            lod_max_clamp: Some(value.lod_max_clamp),
+            compare: value.compare.map(|c| c.into()),
+            max_anisotropy: None,
+            // TODO: Handle `max_anisotropy`, `anisotropy_clamp`, and `border_color`.
+        }
+    }
+}
+
+impl<'a> From<&crate::BindGroupDescriptor<'a>> for webgpu::GpuBindGroupDescriptor<'a> {
+    fn from(value: &crate::BindGroupDescriptor<'a>) -> Self {
+        webgpu::GpuBindGroupDescriptor {
+            layout: downcast_ref(value.layout.data.as_ref()),
+            entries: value.entries.iter().map(|entry| entry.into()).collect(),
+            label: value.label.map(|l| l.into()),
+        }
+    }
+}
+
+impl<'a> From<&crate::BindGroupLayoutDescriptor<'a>> for webgpu::GpuBindGroupLayoutDescriptor {
+    fn from(value: &crate::BindGroupLayoutDescriptor<'a>) -> Self {
+        webgpu::GpuBindGroupLayoutDescriptor {
+            label: value.label.map(|l| l.into()),
+            entries: value.entries.iter().map(|entry| entry.into()).collect(),
+        }
     }
 }
