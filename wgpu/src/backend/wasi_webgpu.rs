@@ -5,11 +5,7 @@ use std::{
     ops::Range,
 };
 
-use wasi::webgpu::{
-    graphics_context::{self, GraphicsContext},
-    mini_canvas::MiniCanvas,
-    webgpu,
-};
+use wasi::webgpu::{graphics_context::GraphicsContext, mini_canvas::MiniCanvas, webgpu};
 
 wit_bindgen::generate!({
     path: "../wit",
@@ -228,7 +224,7 @@ impl crate::Context for ContextWasiWebgpu {
     ) -> (
         Option<Self::TextureId>,
         Option<Self::TextureData>,
-        SurfaceStatus,
+        crate::SurfaceStatus,
         Self::SurfaceOutputDetail,
     ) {
         todo!()
@@ -1520,54 +1516,68 @@ impl Drop for MappedBuffer {
     }
 }
 
-const FEATURES_MAPPING: [(wgt::Features, webgpu::GpuFeatureName); 11] = [
+const FEATURES_MAPPING: [(wgt::Features, webgpu::GpuFeatureName, &str); 11] = [
     (
         wgt::Features::DEPTH_CLIP_CONTROL,
         webgpu::GpuFeatureName::DepthClipControl,
+        "depth-clip-control",
     ),
     (
         wgt::Features::DEPTH32FLOAT_STENCIL8,
         webgpu::GpuFeatureName::Depth32floatStencil8,
+        "depth32float-stencil8",
     ),
     (
         wgt::Features::TEXTURE_COMPRESSION_BC,
         webgpu::GpuFeatureName::TextureCompressionBc,
+        "texture-compression-bc",
     ),
     (
         wgt::Features::TEXTURE_COMPRESSION_ETC2,
         webgpu::GpuFeatureName::TextureCompressionEtc2,
+        "texture-compression-etc2",
     ),
     (
         wgt::Features::TEXTURE_COMPRESSION_ASTC,
         webgpu::GpuFeatureName::TextureCompressionAstc,
+        "texture-compression-astc",
     ),
     (
         wgt::Features::TIMESTAMP_QUERY,
         webgpu::GpuFeatureName::TimestampQuery,
+        "timestamp-query",
     ),
     (
         wgt::Features::INDIRECT_FIRST_INSTANCE,
         webgpu::GpuFeatureName::IndirectFirstInstance,
+        "indirect-first-instance",
     ),
-    (wgt::Features::SHADER_F16, webgpu::GpuFeatureName::ShaderF16),
+    (
+        wgt::Features::SHADER_F16,
+        webgpu::GpuFeatureName::ShaderF16,
+        "shader-f16",
+    ),
     (
         wgt::Features::RG11B10UFLOAT_RENDERABLE,
         webgpu::GpuFeatureName::Rg11b10ufloatRenderable,
+        "rg11b10ufloat-renderable",
     ),
     (
         wgt::Features::BGRA8UNORM_STORAGE,
         webgpu::GpuFeatureName::Bgra8unormStorage,
+        "bgra8unorm-storage",
     ),
     (
         wgt::Features::FLOAT32_FILTERABLE,
         webgpu::GpuFeatureName::Float32Filterable,
+        "float32-filterable",
     ),
 ];
 
 fn map_wgt_features(supported_features: webgpu::GpuSupportedFeatures) -> wgt::Features {
     let mut features = wgt::Features::empty();
-    for (wgpu_feat, wasi_feat) in FEATURES_MAPPING {
-        if supported_features.has(wasi_feat) {
+    for (wgpu_feat, _, str_feat) in FEATURES_MAPPING {
+        if supported_features.has(str_feat) {
             features |= wgpu_feat;
         }
     }

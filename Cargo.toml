@@ -7,6 +7,7 @@ members = [
     # default members
     "d3d12",
     "examples/",
+    "examples-wasi/",
     "naga-cli",
     "naga",
     "naga/fuzz",
@@ -24,6 +25,7 @@ exclude = []
 default-members = [
     "d3d12",
     "examples/",
+    "examples-wasi/",
     "naga-cli",
     "naga",
     "naga/fuzz",
@@ -117,7 +119,8 @@ serde_json = "1.0.111"
 smallvec = "1"
 static_assertions = "1.1.0"
 thiserror = "1"
-wgpu = { version = "0.19.0", path = "./wgpu" }
+# TODO: temporarily disabling default-features because webgpu is a default feature.
+wgpu = { version = "0.19.0", path = "./wgpu", default-features = false }
 wgpu-core = { version = "0.19.0", path = "./wgpu-core" }
 wgpu-example = { version = "0.19.0", path = "./examples/common" }
 wgpu-macros = { version = "0.19.0", path = "./wgpu-macros" }
@@ -162,6 +165,9 @@ wasm-bindgen-futures = "0.4.40"
 wasm-bindgen-test = "0.3"
 web-sys = "0.3.67"
 web-time = "0.2.4"
+
+# wasi dependencies
+wit-bindgen = "0.24"
 
 # deno dependencies
 deno_console = "0.125.0"

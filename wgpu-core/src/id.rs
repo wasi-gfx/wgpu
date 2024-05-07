@@ -152,6 +152,7 @@ where
             Backend::Dx12 => "d3d12",
             Backend::Gl => "gl",
             Backend::BrowserWebGpu => "webgpu",
+            Backend::WasiWebGpu => "wasi-webgpu",
         };
         write!(formatter, "Id({index},{epoch},{backend})")?;
         Ok(())
