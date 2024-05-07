@@ -8,7 +8,7 @@ mod wgpu_core;
 #[cfg(wgpu_core)]
 pub(crate) use wgpu_core::ContextWgpuCore;
 
-#[cfg(wasi_webgpu)]
+#[cfg(feature = "wasi")]
 mod wasi_webgpu;
-#[cfg(wasi_webgpu)]
+#[cfg(feature = "wasi")]
 pub(crate) use wasi_webgpu::ContextWasiWebgpu;

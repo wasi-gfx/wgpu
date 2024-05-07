@@ -1777,7 +1777,10 @@ impl Instance {
                 || cfg!(feature = "angle")
         // On the web, either WebGPU or WebGL must be enabled.
         } else if cfg!(target_arch = "wasm32") {
-            cfg!(feature = "webgpu") || cfg!(feature = "webgl") || cfg!(target_os = "emscripten")
+            cfg!(feature = "webgpu")
+                || cfg!(feature = "webgl")
+                || cfg!(target_os = "emscripten")
+                || cfg!(feature = "wasi")
         } else {
             true
         }
@@ -1833,7 +1836,7 @@ impl Instance {
             };
         }
 
-        #[cfg(wasi_webgpu)]
+        #[cfg(feature = "wasi")]
         {
             return Self {
                 context: Arc::from(crate::backend::ContextWasiWebgpu::init(_instance_desc)),

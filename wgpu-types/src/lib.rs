@@ -106,6 +106,8 @@ pub enum Backend {
     Gl = 4,
     /// WebGPU in the browser
     BrowserWebGpu = 5,
+    /// WASI-WebGPU
+    WasiWebGpu = 6,
 }
 
 impl Backend {
@@ -118,6 +120,7 @@ impl Backend {
             Backend::Dx12 => "dx12",
             Backend::Gl => "gl",
             Backend::BrowserWebGpu => "webgpu",
+            Backend::WasiWebGpu => "wasi-webgpu",
         }
     }
 }
@@ -162,6 +165,8 @@ bitflags::bitflags! {
         /// Whether WebGPU is targeted is decided upon the creation of the `wgpu::Instance`,
         /// *not* upon adapter creation. See `wgpu::Instance::new`.
         const BROWSER_WEBGPU = 1 << Backend::BrowserWebGpu as u32;
+        /// WASI-WebGPU
+        const WASI_WEBGPU = 1 << Backend::WasiWebGpu as u32;
         /// All the apis that wgpu offers first tier of support for.
         ///
         /// Vulkan + Metal + DX12 + Browser WebGPU
@@ -6435,7 +6440,7 @@ impl<T> ImageCopyTexture<T> {
 ///
 /// Corresponds to [WebGPU `GPUImageCopyExternalImage`](
 /// https://gpuweb.github.io/gpuweb/#dictdef-gpuimagecopyexternalimage).
-#[cfg(target_arch = "wasm32")]
+#[cfg(feature = "web")]
 #[derive(Clone, Debug)]
 pub struct ImageCopyExternalImage {
     /// The texture to be copied from. The copy source data is captured at the moment
@@ -6458,7 +6463,7 @@ pub struct ImageCopyExternalImage {
 ///
 /// Corresponds to the [implicit union type on WebGPU `GPUImageCopyExternalImage.source`](
 /// https://gpuweb.github.io/gpuweb/#dom-gpuimagecopyexternalimage-source).
-#[cfg(target_arch = "wasm32")]
+#[cfg(feature = "web")]
 #[derive(Clone, Debug)]
 pub enum ExternalImageSource {
     /// Copy from a previously-decoded image bitmap.
@@ -6473,7 +6478,7 @@ pub enum ExternalImageSource {
     OffscreenCanvas(web_sys::OffscreenCanvas),
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(feature = "web")]
 impl ExternalImageSource {
     /// Gets the pixel, not css, width of the source.
     pub fn width(&self) -> u32 {
@@ -6496,7 +6501,7 @@ impl ExternalImageSource {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(feature = "web")]
 impl std::ops::Deref for ExternalImageSource {
     type Target = js_sys::Object;
 

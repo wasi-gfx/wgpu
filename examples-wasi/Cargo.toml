@@ -1,0 +1,90 @@
+[package]
+name = "wgpu-examples-wasi"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Common example code"
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+harness = false
+
+[[bin]]
+name = "wgpu-examples-wasi"
+path = "src/wasi_runtime.rs"
+test = false
+required-features = ["wasi-runtime"]
+
+[features]
+default = ["wasi"]
+wasi = ["wgpu/wasi"]
+wasi-runtime = ["wasi-graphics-context-wasmtime", "wasi-mini-canvas-wasmtime", "wasi-webgpu-wasmtime", "wasmtime", "wasmtime-wasi", "tokio", "wgpu-core", "wgpu-types"]
+
+[dependencies]
+bytemuck.workspace = true
+cfg-if.workspace = true
+encase = { workspace = true, features = ["glam"] }
+flume.workspace = true
+getrandom.workspace = true
+glam.workspace = true
+ktx2.workspace = true
+log.workspace = true
+nanorand.workspace = true
+noise.workspace = true
+obj.workspace = true
+png.workspace = true
+pollster.workspace = true
+web-time.workspace = true
+wgpu = { workspace = true, features = ["wgsl", "wasi"], default-features = false }
+winit.workspace = true
+
+# wasi runtime dependencies
+wasi-graphics-context-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "a570dd9e178f80dda5317da72cfe8e6191094987", optional = true }
+wasi-mini-canvas-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "a570dd9e178f80dda5317da72cfe8e6191094987", optional = true }
+wasi-webgpu-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "a570dd9e178f80dda5317da72cfe8e6191094987", optional = true }
+wasmtime = { version = "17.0", optional = true }
+wasmtime-wasi = { version = "17.0", optional = true }
+tokio = { workspace = true, features = ["full"], optional = true}
+wgpu-core = { version = "0.18", optional = true }
+wgpu-types = { version = "0.18", optional = true }
+
+# wasi guest dependencies
+wit-bindgen.workspace = true
+
+
+[dev-dependencies]
+wgpu-test.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook.workspace = true
+console_log.workspace = true
+fern.workspace = true
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+hal = { workspace = true, optional = true }
+# We need these features in the framework examples and tests
+web-sys = { workspace = true, features = [
+    "Location",
+    "Blob",
+    "RequestInit",
+    "RequestMode",
+    "Request",
+    "ImageData",
+    "Response",
+    "HtmlImageElement",
+    "WebGl2RenderingContext",
+    "CanvasRenderingContext2d",
+] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true

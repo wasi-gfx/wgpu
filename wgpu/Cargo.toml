@@ -45,15 +45,15 @@ angle = ["wgc?/gles"]
 vulkan-portability = ["wgc?/vulkan"]
 
 ## Enables the WebGPU backend on Wasm. Disabled when targeting `emscripten`.
-webgpu = ["naga?/wgsl-out"]
+webgpu = ["naga?/wgsl-out", "wgt/web"]
 
 ## Enables the WASI-WebGPU backend.
-wasi-webgpu = []
+wasi = ["wit-bindgen"]
 
 ## Enables the GLES backend on Wasm
 ##
 ## * ⚠️ WIP: Currently will also enable GLES dependencies on any other targets.
-webgl = ["hal", "wgc/gles"]
+webgl = ["hal", "wgc/gles", "wgt/web"]
 
 #! ### Shading language support
 # --------------------------------------------------------------------
@@ -170,8 +170,7 @@ raw-window-handle = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive"], optional = true }
 smallvec.workspace = true
 static_assertions.workspace = true
-# TODO: only for wasi-webgpu
-wit-bindgen = "0.19.0"
+wit-bindgen = { workspace = true, optional = true }
 
 [dependencies.naga]
 workspace = true
