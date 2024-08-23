@@ -12,7 +12,7 @@ mod flume;
 // pub mod hello;
 pub mod hello_compute;
 // pub mod hello_synchronization;
-// pub mod hello_triangle;
+pub mod hello_triangle;
 // pub mod hello_windows;
 // pub mod hello_workgroups;
 // pub mod mipmap;
