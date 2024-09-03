@@ -895,7 +895,7 @@ interface webgpu {
     record gpu-render-pass-descriptor {
         color-attachments: list<gpu-render-pass-color-attachment>,
         depth-stencil-attachment: option<gpu-render-pass-depth-stencil-attachment>,
-        occlusion-query-set: option<borrow<gpu-query-set>>,
+        occlusion-query-set: option<gpu-query-set>,
         timestamp-writes: option<gpu-render-pass-timestamp-writes>,
         max-draw-count: option<gpu-size64>,
         label: option<string>,
@@ -929,14 +929,14 @@ interface webgpu {
         set-label: func(label: string);
     }
     record gpu-render-pass-timestamp-writes {
-        query-set: borrow<gpu-query-set>,
+        query-set: gpu-query-set,
         beginning-of-pass-write-index: option<gpu-size32>,
         end-of-pass-write-index: option<gpu-size32>,
     }
     record gpu-render-pass-color-attachment {
-        view: borrow<gpu-texture-view>,
+        view: gpu-texture-view,
         depth-slice: option<gpu-integer-coordinate>,
-        resolve-target: option<borrow<gpu-texture-view>>,
+        resolve-target: option<gpu-texture-view>,
         clear-value: option<gpu-color>,
         load-op: gpu-load-op,
         store-op: gpu-store-op,
