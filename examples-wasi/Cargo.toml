@@ -24,7 +24,7 @@ required-features = ["wasi-runtime"]
 [features]
 default = ["wasi"]
 wasi = ["wgpu/wasi"]
-wasi-runtime = ["wasi-graphics-context-wasmtime", "wasi-mini-canvas-wasmtime", "wasi-webgpu-wasmtime", "wasmtime", "wasmtime-wasi", "tokio", "wgpu-core", "wgpu-types"]
+wasi-runtime = ["wasi-graphics-context-wasmtime", "wasi-mini-canvas-wasmtime", "wasi-webgpu-wasmtime", "wasmtime", "wasmtime-wasi", "tokio"]
 
 [dependencies]
 bytemuck.workspace = true
@@ -42,17 +42,15 @@ png.workspace = true
 pollster.workspace = true
 web-time.workspace = true
 wgpu = { workspace = true, features = ["wgsl", "wasi"], default-features = false }
-winit.workspace = true
 
 # wasi runtime dependencies
-wasi-graphics-context-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "a570dd9e178f80dda5317da72cfe8e6191094987", optional = true }
-wasi-mini-canvas-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "a570dd9e178f80dda5317da72cfe8e6191094987", optional = true }
-wasi-webgpu-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "a570dd9e178f80dda5317da72cfe8e6191094987", optional = true }
-wasmtime = { version = "17.0", optional = true }
-wasmtime-wasi = { version = "17.0", optional = true }
+wasi-graphics-context-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "31bb539af3779585187b58376888b2f8f0f50a5d", optional = true }
+wasi-mini-canvas-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "31bb539af3779585187b58376888b2f8f0f50a5d", features = ["winit"], optional = true }
+wasi-webgpu-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "31bb539af3779585187b58376888b2f8f0f50a5d", optional = true }
+wasmtime = { version = "21.0", optional = true }
+wasmtime-wasi = { version = "21.0", optional = true }
 tokio = { workspace = true, features = ["full"], optional = true}
-wgpu-core = { version = "0.18", optional = true }
-wgpu-types = { version = "0.18", optional = true }
+futures = "0.3"
 
 # wasi guest dependencies
 wit-bindgen.workspace = true
