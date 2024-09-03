@@ -85,18 +85,18 @@ const EXAMPLES: &[ExampleDesc] = &[
     //     webgl: true,
     //     webgpu: true,
     // },
-    // ExampleDesc {
-    //     name: "render_to_texture",
-    //     function: crate::render_to_texture::main,
-    //     webgl: false, // No canvas for WebGL
-    //     webgpu: true,
-    // },
-    // ExampleDesc {
-    //     name: "repeated_compute",
-    //     function: crate::repeated_compute::main,
-    //     webgl: false, // No compute
-    //     webgpu: true,
-    // },
+    ExampleDesc {
+        name: "render_to_texture",
+        function: crate::render_to_texture::main,
+        webgl: false, // No canvas for WebGL
+        webgpu: true,
+    },
+    ExampleDesc {
+        name: "repeated_compute",
+        function: crate::repeated_compute::main,
+        webgl: false, // No compute
+        webgpu: true,
+    },
     // ExampleDesc {
     //     name: "shadow",
     //     function: crate::shadow::main,
