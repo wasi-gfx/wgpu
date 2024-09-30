@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use wasi::webgpu::{graphics_context::GraphicsContext, mini_canvas::MiniCanvas, webgpu};
+use wasi::webgpu::{graphics_context::Context, surface::Surface, webgpu};
 
 wit_bindgen::generate!({
     path: "../wit",
@@ -73,7 +73,7 @@ impl crate::Context for ContextWasiWebgpu {
     type RenderBundleData = webgpu::GpuRenderBundle;
 
     type SurfaceId = ();
-    type SurfaceData = (MiniCanvas, Arc<GraphicsContext>);
+    type SurfaceData = (Surface, Arc<Context>);
     type SurfaceOutputDetail = SurfaceOutputDetail;
     type SubmissionIndex = (); // TODO: fix type
     type SubmissionIndexData = (); // TODO: fix type
@@ -107,7 +107,8 @@ impl crate::Context for ContextWasiWebgpu {
         &self,
         _options: &crate::RequestAdapterOptions<'_, '_>,
     ) -> Self::RequestAdapterFuture {
-        let adapter = self.0.request_adapter(None);
+        // TODO: pass in options
+        let adapter = self.0.request_adapter(None).unwrap();
         ready(Some(((), adapter)))
     }
 
@@ -167,7 +168,7 @@ impl crate::Context for ContextWasiWebgpu {
         _adapter: &Self::AdapterId,
         adapter_data: &Self::AdapterData,
     ) -> wgt::AdapterInfo {
-        let _info = adapter_data.request_adapter_info();
+        let _info = adapter_data.info();
 
         // TODO: use data from `request_adapter_info`
         wgt::AdapterInfo {
@@ -286,7 +287,7 @@ impl crate::Context for ContextWasiWebgpu {
         desc: crate::ShaderModuleDescriptor<'_>,
         _shader_bound_checks: wgt::ShaderBoundChecks,
     ) -> (Self::ShaderModuleId, Self::ShaderModuleData) {
-        ((), device_data.create_shader_module(desc.into()))
+        ((), device_data.create_shader_module(&desc.into()))
     }
 
     unsafe fn device_create_shader_module_spirv(
@@ -313,7 +314,7 @@ impl crate::Context for ContextWasiWebgpu {
         device_data: &Self::DeviceData,
         desc: &crate::BindGroupDescriptor<'_>,
     ) -> (Self::BindGroupId, Self::BindGroupData) {
-        ((), device_data.create_bind_group(desc.into()))
+        ((), device_data.create_bind_group(&desc.into()))
     }
 
     fn device_create_pipeline_layout(
@@ -331,7 +332,7 @@ impl crate::Context for ContextWasiWebgpu {
         device_data: &Self::DeviceData,
         desc: &crate::RenderPipelineDescriptor<'_>,
     ) -> (Self::RenderPipelineId, Self::RenderPipelineData) {
-        ((), device_data.create_render_pipeline(&desc.into()))
+        ((), device_data.create_render_pipeline(desc.into()))
     }
 
     fn device_create_compute_pipeline(
@@ -340,7 +341,7 @@ impl crate::Context for ContextWasiWebgpu {
         device_data: &Self::DeviceData,
         desc: &crate::ComputePipelineDescriptor<'_>,
     ) -> (Self::ComputePipelineId, Self::ComputePipelineData) {
-        ((), device_data.create_compute_pipeline(&desc.into()))
+        ((), device_data.create_compute_pipeline(desc.into()))
     }
 
     fn device_create_buffer(
@@ -489,13 +490,10 @@ impl crate::Context for ContextWasiWebgpu {
         buffer_data: &Self::BufferData,
         sub_range: Range<wgt::BufferAddress>,
     ) -> Box<dyn crate::context::BufferMappedRange> {
-        let actual_mapping =
-            buffer_data.get_mapped_range(Some(sub_range.start), Some(sub_range.end));
-        let temporary_mapping = (0..actual_mapping.length())
-            .map(|i| actual_mapping.get(i))
-            .collect();
+        let buffer = buffer_data.get_mapped_range(Some(sub_range.start), Some(sub_range.end));
+        let temporary_mapping = buffer.get();
         Box::new(MappedBuffer {
-            actual_mapping,
+            buffer,
             temporary_mapping,
         })
     }
@@ -686,7 +684,7 @@ impl crate::Context for ContextWasiWebgpu {
         encoder_data.as_ref().unwrap().copy_texture_to_buffer(
             &(&source).into(),
             &(&destination).into(),
-            &copy_size.into(),
+            copy_size.into(),
         );
     }
 
@@ -721,14 +719,11 @@ impl crate::Context for ContextWasiWebgpu {
     fn command_encoder_end_compute_pass(
         &self,
         _encoder: &Self::CommandEncoderId,
-        encoder_data: &Self::CommandEncoderData,
+        _encoder_data: &Self::CommandEncoderData,
         _pass: &mut Self::ComputePassId,
         pass_data: &mut Self::ComputePassData,
     ) {
-        webgpu::GpuComputePassEncoder::end(
-            pass_data.take().unwrap(),
-            encoder_data.as_ref().unwrap(),
-        );
+        pass_data.take().unwrap().end();
     }
 
     fn command_encoder_begin_render_pass(
@@ -745,14 +740,11 @@ impl crate::Context for ContextWasiWebgpu {
     fn command_encoder_end_render_pass(
         &self,
         _encoder: &Self::CommandEncoderId,
-        encoder_data: &Self::CommandEncoderData,
+        _encoder_data: &Self::CommandEncoderData,
         _pass: &mut Self::RenderPassId,
         pass_data: &mut Self::RenderPassData,
     ) {
-        webgpu::GpuRenderPassEncoder::end(
-            pass_data.take().unwrap(),
-            encoder_data.as_ref().unwrap(),
-        );
+        pass_data.take().unwrap().end();
     }
 
     fn command_encoder_finish(
@@ -769,10 +761,7 @@ impl crate::Context for ContextWasiWebgpu {
                 label: Some(encoder_data.label()),
             })
         };
-        (
-            (),
-            webgpu::GpuCommandEncoder::finish(encoder_data, desc.as_ref()),
-        )
+        ((), encoder_data.finish(desc.as_ref()))
     }
 
     fn command_encoder_clear_texture(
@@ -930,10 +919,11 @@ impl crate::Context for ContextWasiWebgpu {
         queue_data: &Self::QueueData,
         command_buffers: I,
     ) -> (Self::SubmissionIndex, Self::SubmissionIndexData) {
-        let command_buffers = command_buffers
+        let command_buffers: Vec<webgpu::GpuCommandBuffer> = command_buffers
             .map(|(_, command_buffer)| command_buffer)
-            .collect();
-        ((), queue_data.submit(command_buffers))
+            .collect::<Vec<_>>();
+        let command_buffers: Vec<&webgpu::GpuCommandBuffer> = command_buffers.iter().collect();
+        ((), queue_data.submit(&command_buffers))
     }
 
     fn queue_get_timestamp_period(
@@ -983,7 +973,7 @@ impl crate::Context for ContextWasiWebgpu {
         pass_data
             .as_ref()
             .unwrap()
-            .set_bind_group(index, bind_group_data, Some(offsets));
+            .set_bind_group(index, Some(bind_group_data), Some(offsets));
     }
 
     fn compute_pass_set_push_constants(
@@ -1255,7 +1245,7 @@ impl crate::Context for ContextWasiWebgpu {
         pass_data
             .as_ref()
             .unwrap()
-            .set_bind_group(index, bind_group_data, Some(offsets));
+            .set_bind_group(index, Some(bind_group_data), Some(offsets));
     }
 
     fn render_pass_set_index_buffer(
@@ -1275,8 +1265,8 @@ impl crate::Context for ContextWasiWebgpu {
         pass_data.as_ref().unwrap().set_index_buffer(
             buffer_data,
             index_format.into(),
-            offset,
-            size,
+            Some(offset),
+            Some(size),
         );
     }
 
@@ -1294,10 +1284,12 @@ impl crate::Context for ContextWasiWebgpu {
             Some(size) => size.get(),
             None => buffer_data.size(),
         };
-        pass_data
-            .as_ref()
-            .unwrap()
-            .set_vertex_buffer(slot, buffer_data, offset, size);
+        pass_data.as_ref().unwrap().set_vertex_buffer(
+            slot,
+            Some(buffer_data),
+            Some(offset),
+            Some(size),
+        );
     }
 
     fn render_pass_set_push_constants(
@@ -1320,9 +1312,9 @@ impl crate::Context for ContextWasiWebgpu {
     ) {
         pass_data.as_ref().unwrap().draw(
             vertices.end - vertices.start,
-            instances.end - instances.start,
-            vertices.start,
-            instances.start,
+            Some(instances.end - instances.start),
+            Some(vertices.start),
+            Some(instances.start),
         );
     }
 
@@ -1336,10 +1328,10 @@ impl crate::Context for ContextWasiWebgpu {
     ) {
         pass_data.as_ref().unwrap().draw_indexed(
             indices.end - indices.start,
-            instances.end - instances.start,
-            indices.start,
-            base_vertex,
-            instances.start,
+            Some(instances.end - instances.start),
+            Some(indices.start),
+            Some(base_vertex),
+            Some(instances.start),
         );
     }
 
@@ -1547,14 +1539,12 @@ impl crate::Context for ContextWasiWebgpu {
 }
 
 pub struct SurfaceOutputDetail {
-    pub(crate) graphics_context: Arc<webgpu::GraphicsContext>,
+    pub(crate) graphics_context: Arc<webgpu::Context>,
 }
 
-// inefficient, since `temporary_mapping`` needs to be copied to `actual_mapping`.
-// only needed becuase the `BufferMappedRange` trait methods return slices. If we change them to return `impl SliceIndex` we can get rid of this indirection.
 #[derive(Debug)]
 pub struct MappedBuffer {
-    actual_mapping: webgpu::RemoteBuffer,
+    buffer: webgpu::NonStandardBuffer,
     temporary_mapping: Vec<u8>,
 }
 
@@ -1574,11 +1564,7 @@ impl Drop for MappedBuffer {
     fn drop(&mut self) {
         // Copy from the temporary mapping back into the array buffer that was
         // originally provided by the runtime
-
-        // TODO: use RemoteBuffer.set_range once available
-        for (i, byte) in self.temporary_mapping.iter().enumerate() {
-            self.actual_mapping.set(i as u32, *byte);
-        }
+        self.buffer.set(&self.temporary_mapping);
     }
 }
 
@@ -1675,7 +1661,7 @@ fn map_wgt_limits(limits: webgpu::GpuSupportedLimits) -> wgt::Limits {
         max_vertex_buffer_array_stride: limits.max_vertex_buffer_array_stride(),
         min_uniform_buffer_offset_alignment: limits.min_uniform_buffer_offset_alignment(),
         min_storage_buffer_offset_alignment: limits.min_storage_buffer_offset_alignment(),
-        max_inter_stage_shader_components: limits.max_inter_stage_shader_components(),
+        max_inter_stage_shader_components: 0, // Removed from spec,
         max_compute_workgroup_storage_size: limits.max_compute_workgroup_storage_size(),
         max_compute_invocations_per_workgroup: limits.max_compute_invocations_per_workgroup(),
         max_compute_workgroup_size_x: limits.max_compute_workgroup_size_x(),
@@ -1775,18 +1761,19 @@ impl From<crate::IndexFormat> for webgpu::GpuIndexFormat {
 impl From<crate::TextureDimension> for webgpu::GpuTextureDimension {
     fn from(value: crate::TextureDimension) -> Self {
         match value {
-            wgt::TextureDimension::D1 => webgpu::GpuTextureDimension::OneD,
-            wgt::TextureDimension::D2 => webgpu::GpuTextureDimension::TwoD,
-            wgt::TextureDimension::D3 => webgpu::GpuTextureDimension::ThreeD,
+            wgt::TextureDimension::D1 => webgpu::GpuTextureDimension::D1,
+            wgt::TextureDimension::D2 => webgpu::GpuTextureDimension::D2,
+            wgt::TextureDimension::D3 => webgpu::GpuTextureDimension::D3,
         }
     }
 }
 
 impl From<crate::MapMode> for webgpu::GpuMapModeFlags {
     fn from(value: crate::MapMode) -> Self {
+        // https://www.w3.org/TR/webgpu/#buffer-mapping
         match value {
-            crate::MapMode::Read => 0,
-            crate::MapMode::Write => 1,
+            crate::MapMode::Read => 1,
+            crate::MapMode::Write => 2,
         }
     }
 }
@@ -2182,12 +2169,12 @@ impl From<crate::TextureSampleType> for webgpu::GpuTextureSampleType {
 impl From<crate::TextureViewDimension> for webgpu::GpuTextureViewDimension {
     fn from(value: crate::TextureViewDimension) -> Self {
         match value {
-            wgt::TextureViewDimension::D1 => webgpu::GpuTextureViewDimension::OneD,
-            wgt::TextureViewDimension::D2 => webgpu::GpuTextureViewDimension::TwoD,
-            wgt::TextureViewDimension::D2Array => webgpu::GpuTextureViewDimension::TwoDArray,
+            wgt::TextureViewDimension::D1 => webgpu::GpuTextureViewDimension::D1,
+            wgt::TextureViewDimension::D2 => webgpu::GpuTextureViewDimension::D2,
+            wgt::TextureViewDimension::D2Array => webgpu::GpuTextureViewDimension::D2Array,
             wgt::TextureViewDimension::Cube => webgpu::GpuTextureViewDimension::Cube,
             wgt::TextureViewDimension::CubeArray => webgpu::GpuTextureViewDimension::CubeArray,
-            wgt::TextureViewDimension::D3 => webgpu::GpuTextureViewDimension::ThreeD,
+            wgt::TextureViewDimension::D3 => webgpu::GpuTextureViewDimension::D3,
         }
     }
 }
@@ -2320,7 +2307,9 @@ impl<'a> From<&crate::FragmentState<'a>> for webgpu::GpuFragmentState<'a> {
                 .map(|t| t.as_ref().map(|t| t.into()))
                 .collect(),
             module: downcast_ref(value.module.data.as_ref()),
-            entry_point: value.entry_point.into(),
+            entry_point: Some(value.entry_point.into()),
+            // TODO: what should be the default here?
+            constants: None,
         }
     }
 }
@@ -2348,9 +2337,11 @@ impl<'a> From<&crate::VertexBufferLayout<'a>> for webgpu::GpuVertexBufferLayout 
 impl<'a> From<&crate::VertexState<'a>> for webgpu::GpuVertexState<'a> {
     fn from(value: &crate::VertexState<'a>) -> Self {
         Self {
-            buffers: Some(value.buffers.iter().map(|b| b.into()).collect()),
+            buffers: Some(value.buffers.iter().map(|b| Some(b.into())).collect()),
             module: downcast_ref(value.module.data.as_ref()),
-            entry_point: value.entry_point.into(),
+            entry_point: Some(value.entry_point.into()),
+            // TODO: what should be the default here?
+            constants: None,
         }
     }
 }
@@ -2370,11 +2361,11 @@ impl From<&crate::PrimitiveState> for webgpu::GpuPrimitiveState {
 
 impl From<crate::Extent3d> for webgpu::GpuExtent3D {
     fn from(value: crate::Extent3d) -> Self {
-        webgpu::GpuExtent3D::GpuExtent3DDict(webgpu::GpuExtent3DDict {
+        webgpu::GpuExtent3D {
             width: value.width,
             height: Some(value.height),
             depth_or_array_layers: Some(value.depth_or_array_layers),
-        })
+        }
     }
 }
 
@@ -2431,7 +2422,6 @@ impl<'a> From<&crate::BindGroupLayoutEntry> for webgpu::GpuBindGroupLayoutEntry 
             sampler: None,
             texture: None,
             storage_texture: None,
-            external_texture: None,
         };
 
         match entry.ty {
@@ -2467,7 +2457,7 @@ impl<'a> From<&crate::BindGroupLayoutEntry> for webgpu::GpuBindGroupLayoutEntry 
             } => {
                 mapped_entry.texture = Some(webgpu::GpuTextureBindingLayout {
                     sample_type: Some(sample_type.into()),
-                    view_dimension: view_dimension.into(),
+                    view_dimension: Some(view_dimension.into()),
                     multisampled: Some(multisampled.into()),
                 });
             }
@@ -2479,7 +2469,7 @@ impl<'a> From<&crate::BindGroupLayoutEntry> for webgpu::GpuBindGroupLayoutEntry 
                 mapped_entry.storage_texture = Some(webgpu::GpuStorageTextureBindingLayout {
                     access: Some(access.into()),
                     format: format.into(),
-                    view_dimension: view_dimension.into(),
+                    view_dimension: Some(view_dimension.into()),
                 });
             }
             wgt::BindingType::AccelerationStructure => todo!(),
@@ -2559,6 +2549,8 @@ impl<'a> From<&crate::TextureViewDescriptor<'a>> for webgpu::GpuTextureViewDescr
             mip_level_count: value.mip_level_count,
             base_array_layer: Some(value.base_array_layer),
             array_layer_count: value.array_layer_count,
+            // TODO: what should be the default here?
+            usage: None,
         }
     }
 }
@@ -2585,17 +2577,18 @@ impl<'a> From<&crate::BufferDescriptor<'a>> for webgpu::GpuBufferDescriptor {
 impl<'a> From<&crate::ComputePipelineDescriptor<'a>> for webgpu::GpuComputePipelineDescriptor<'a> {
     fn from(value: &crate::ComputePipelineDescriptor<'a>) -> Self {
         Self {
+            label: value.label.map(|l| l.into()),
             compute: webgpu::GpuProgrammableStage {
                 module: value.module.data.downcast_ref().unwrap(),
                 entry_point: Some(value.entry_point.to_string()),
+                // TODO: what should be the default here?
+                constants: None,
             },
             layout: match value.layout {
-                Some(layout) => webgpu::GpuPipelineLayoutOrGpuAutoLayoutMode::GpuPipelineLayout(
-                    layout.data.downcast_ref().unwrap(),
-                ),
-                None => webgpu::GpuPipelineLayoutOrGpuAutoLayoutMode::GpuAutoLayoutMode(
-                    webgpu::GpuAutoLayoutMode::Auto,
-                ),
+                Some(layout) => {
+                    webgpu::GpuLayout::GpuPipelineLayout(layout.data.downcast_ref().unwrap())
+                }
+                None => webgpu::GpuLayout::GpuAutoLayoutMode(webgpu::GpuAutoLayoutMode::Auto),
             },
         }
     }
@@ -2604,12 +2597,18 @@ impl<'a> From<&crate::ComputePipelineDescriptor<'a>> for webgpu::GpuComputePipel
 impl<'a> From<&crate::RenderPipelineDescriptor<'a>> for webgpu::GpuRenderPipelineDescriptor<'a> {
     fn from(value: &crate::RenderPipelineDescriptor<'a>) -> Self {
         Self {
+            label: value.label.map(|l| l.into()),
             vertex: (&value.vertex).into(),
             primitive: Some((&value.primitive).into()),
             depth_stencil: value.depth_stencil.as_ref().map(|ds| ds.into()),
             multisample: Some((&value.multisample).into()),
             fragment: value.fragment.as_ref().map(|f| f.into()),
-            layout: value.layout.map(|l| downcast_ref(l.data.as_ref())),
+            layout: match value.layout {
+                Some(layout) => {
+                    webgpu::GpuLayout::GpuPipelineLayout(layout.data.downcast_ref().unwrap())
+                }
+                None => webgpu::GpuLayout::GpuAutoLayoutMode(webgpu::GpuAutoLayoutMode::Auto),
+            },
         }
     }
 }
@@ -2627,7 +2626,7 @@ impl<'a> From<&crate::PipelineLayoutDescriptor<'a>> for webgpu::GpuPipelineLayou
     }
 }
 
-impl<'a> From<crate::ShaderModuleDescriptor<'a>> for webgpu::GpuShaderModuleDescriptor {
+impl<'a> From<crate::ShaderModuleDescriptor<'a>> for webgpu::GpuShaderModuleDescriptor<'a> {
     fn from(value: crate::ShaderModuleDescriptor<'a>) -> Self {
         let source = match value.source {
             #[cfg(feature = "spirv")]
@@ -2718,7 +2717,7 @@ impl<'a> From<&crate::TextureDescriptor<'a>> for webgpu::GpuTextureDescriptor {
             size: value.size.into(),
             mip_level_count: Some(value.mip_level_count),
             sample_count: Some(value.sample_count),
-            dimension: value.dimension.into(),
+            dimension: Some(value.dimension.into()),
             format: value.format.into(),
             usage: value.usage.bits(),
             view_formats: Some(value.view_formats.iter().map(|f| (*f).into()).collect()),
@@ -2766,12 +2765,12 @@ impl<'a> From<&crate::BindGroupLayoutDescriptor<'a>> for webgpu::GpuBindGroupLay
 
 impl From<&crate::Color> for webgpu::GpuColor {
     fn from(value: &crate::Color) -> Self {
-        webgpu::GpuColor::GpuColorDict(webgpu::GpuColorDict {
+        webgpu::GpuColor {
             r: value.r,
             g: value.g,
             b: value.b,
             a: value.a,
-        })
+        }
     }
 }
 
@@ -2861,9 +2860,11 @@ impl<'a> From<&crate::RenderPassDescriptor<'a, 'a>> for webgpu::GpuRenderPassDes
                 .color_attachments
                 .iter()
                 .map(|ca| {
-                    ca.as_ref()
-                        .expect("TODO: will sleve resolve with updated wit")
-                        .into()
+                    Some(
+                        ca.as_ref()
+                            .expect("TODO: will sleve resolve with updated wit")
+                            .into(),
+                    )
                 })
                 .collect(),
             depth_stencil_attachment: value.depth_stencil_attachment.as_ref().map(|a| a.into()),
@@ -2900,14 +2901,12 @@ impl<'a> From<&crate::ImageCopyBuffer<'a>> for webgpu::GpuImageCopyBuffer<'a> {
     }
 }
 
-impl From<&crate::Origin3d> for webgpu::GpuOrigin3DDictOrListGpuIntegerCoordinate {
+impl From<&crate::Origin3d> for webgpu::GpuOrigin3D {
     fn from(value: &crate::Origin3d) -> Self {
-        webgpu::GpuOrigin3DDictOrListGpuIntegerCoordinate::GpuOrigin3DDict(
-            webgpu::GpuOrigin3DDict {
-                x: Some(value.x),
-                y: Some(value.y),
-                z: Some(value.z),
-            },
-        )
+        webgpu::GpuOrigin3D {
+            x: Some(value.x),
+            y: Some(value.y),
+            z: Some(value.z),
+        }
     }
 }
