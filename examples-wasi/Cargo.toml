@@ -24,7 +24,7 @@ required-features = ["wasi-runtime"]
 [features]
 default = ["wasi"]
 wasi = ["wgpu/wasi"]
-wasi-runtime = ["wasi-graphics-context-wasmtime", "wasi-mini-canvas-wasmtime", "wasi-webgpu-wasmtime", "wasmtime", "wasmtime-wasi", "tokio"]
+wasi-runtime = ["wasi-graphics-context-wasmtime", "wasi-surface-wasmtime", "wasi-webgpu-wasmtime", "wasmtime", "wasmtime-wasi", "tokio"]
 
 [dependencies]
 bytemuck.workspace = true
@@ -44,9 +44,9 @@ web-time.workspace = true
 wgpu = { workspace = true, features = ["wgsl", "wasi"], default-features = false }
 
 # wasi runtime dependencies
-wasi-graphics-context-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "caed50bfb6738721cf50bc90f19aa0ae5e8db1c4", optional = true }
-wasi-mini-canvas-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "caed50bfb6738721cf50bc90f19aa0ae5e8db1c4", features = ["winit"], optional = true }
-wasi-webgpu-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "caed50bfb6738721cf50bc90f19aa0ae5e8db1c4", optional = true }
+wasi-graphics-context-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "c45cc0806897c61fad1591c941d15ff28fcb7f55", optional = true }
+wasi-surface-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "c45cc0806897c61fad1591c941d15ff28fcb7f55", features = ["winit"], optional = true }
+wasi-webgpu-wasmtime = { git = "https://github.com/MendyBerger/wasi-webgpu.git", rev = "c45cc0806897c61fad1591c941d15ff28fcb7f55", optional = true }
 wasmtime = { version = "21.0", optional = true }
 wasmtime-wasi = { version = "21.0", optional = true }
 tokio = { workspace = true, features = ["full"], optional = true}
