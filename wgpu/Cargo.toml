@@ -164,7 +164,8 @@ optional = true
 arrayvec.workspace = true
 cfg-if.workspace = true
 log.workspace = true
-parking_lot.workspace = true
+# TODO: only lock to 0.12 when compiling for wasm
+parking_lot = "0.12"
 profiling.workspace = true
 raw-window-handle = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive"], optional = true }
