@@ -320,4 +320,5 @@ web-sys = { workspace = true, features = [
 wasm-bindgen.workspace = true
 js-sys.workspace = true
 wasm-bindgen-futures.workspace = true
-parking_lot.workspace = true
+# can't rely on workspace's version as we need at least 0.12 becuase of https://github.com/Amanieu/parking_lot/pull/302
+parking_lot = "0.12"
