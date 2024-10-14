@@ -1,6 +1,10 @@
-use crate::{context::downcast_ref, SurfaceTargetUnsafe, UncapturedErrorHandler};
+use crate::{
+    context::{downcast_ref, QueueWriteBuffer},
+    SurfaceTargetUnsafe, UncapturedErrorHandler,
+};
 
 use std::{
+    any::Any,
     future::{ready, Ready},
     ops::Range,
     sync::Arc,
@@ -884,33 +888,47 @@ impl crate::Context for ContextWasiWebgpu {
         &self,
         _queue: &Self::QueueId,
         _queue_data: &Self::QueueData,
-        _size: wgt::BufferSize,
+        size: wgt::BufferSize,
     ) -> Option<Box<dyn crate::context::QueueWriteBuffer>> {
-        todo!()
+        Some(Box::new(WebQueueWriteBuffer(
+            vec![0; size.get() as usize].into_boxed_slice(),
+        )))
     }
 
     fn queue_write_staging_buffer(
         &self,
-        _queue: &Self::QueueId,
-        _queue_data: &Self::QueueData,
-        _buffer: &Self::BufferId,
-        _buffer_data: &Self::BufferData,
-        _offset: wgt::BufferAddress,
-        _staging_buffer: &dyn crate::context::QueueWriteBuffer,
+        queue: &Self::QueueId,
+        queue_data: &Self::QueueData,
+        buffer: &Self::BufferId,
+        buffer_data: &Self::BufferData,
+        offset: wgt::BufferAddress,
+        staging_buffer: &dyn crate::context::QueueWriteBuffer,
     ) {
-        todo!()
+        let staging_buffer = staging_buffer
+            .as_any()
+            .downcast_ref::<WebQueueWriteBuffer>()
+            .unwrap()
+            .slice();
+        self.queue_write_buffer(
+            queue,
+            queue_data,
+            buffer,
+            buffer_data,
+            offset,
+            staging_buffer,
+        )
     }
 
     fn queue_write_texture(
         &self,
         _queue: &Self::QueueId,
-        _queue_data: &Self::QueueData,
-        _texture: crate::ImageCopyTexture<'_>,
-        _data: &[u8],
-        _data_layout: wgt::ImageDataLayout,
-        _size: wgt::Extent3d,
+        queue_data: &Self::QueueData,
+        texture: crate::ImageCopyTexture<'_>,
+        data: &[u8],
+        data_layout: wgt::ImageDataLayout,
+        size: wgt::Extent3d,
     ) {
-        todo!()
+        queue_data.write_texture(&texture.into(), data, data_layout.into(), size.into())
     }
 
     fn queue_submit<I: Iterator<Item = (Self::CommandBufferId, Self::CommandBufferData)>>(
@@ -1423,27 +1441,33 @@ impl crate::Context for ContextWasiWebgpu {
     fn render_pass_set_scissor_rect(
         &self,
         _pass: &mut Self::RenderPassId,
-        _pass_data: &mut Self::RenderPassData,
-        _x: u32,
-        _y: u32,
-        _width: u32,
-        _height: u32,
+        pass_data: &mut Self::RenderPassData,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
     ) {
-        todo!()
+        pass_data
+            .as_ref()
+            .unwrap()
+            .set_scissor_rect(x, y, width, height);
     }
 
     fn render_pass_set_viewport(
         &self,
         _pass: &mut Self::RenderPassId,
-        _pass_data: &mut Self::RenderPassData,
-        _x: f32,
-        _y: f32,
-        _width: f32,
-        _height: f32,
-        _min_depth: f32,
-        _max_depth: f32,
+        pass_data: &mut Self::RenderPassData,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        min_depth: f32,
+        max_depth: f32,
     ) {
-        todo!()
+        pass_data
+            .as_ref()
+            .unwrap()
+            .set_viewport(x, y, width, height, min_depth, max_depth);
     }
 
     fn render_pass_set_stencil_reference(
@@ -1535,6 +1559,24 @@ impl crate::Context for ContextWasiWebgpu {
         _render_bundles: &mut dyn Iterator<Item = (Self::RenderBundleId, &Self::RenderBundleData)>,
     ) {
         todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct WebQueueWriteBuffer(Box<[u8]>);
+
+impl QueueWriteBuffer for WebQueueWriteBuffer {
+    fn slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    #[inline]
+    fn slice_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -2265,6 +2307,27 @@ impl From<crate::Face> for webgpu::GpuCullMode {
         match value {
             wgt::Face::Front => webgpu::GpuCullMode::Front,
             wgt::Face::Back => webgpu::GpuCullMode::Back,
+        }
+    }
+}
+
+impl<'a> From<crate::ImageCopyTexture<'a>> for webgpu::GpuImageCopyTexture<'a> {
+    fn from(value: crate::ImageCopyTexture<'a>) -> Self {
+        Self {
+            texture: downcast_ref(value.texture.data.as_ref()),
+            mip_level: Some(value.mip_level),
+            origin: Some((&value.origin).into()),
+            aspect: Some(value.aspect.into()),
+        }
+    }
+}
+
+impl From<crate::ImageDataLayout> for webgpu::GpuImageDataLayout {
+    fn from(value: crate::ImageDataLayout) -> Self {
+        Self {
+            offset: Some(value.offset),
+            bytes_per_row: value.bytes_per_row,
+            rows_per_image: value.rows_per_image,
         }
     }
 }
