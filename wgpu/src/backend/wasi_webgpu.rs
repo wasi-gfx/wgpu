@@ -2154,7 +2154,7 @@ impl From<crate::TextureSampleType> for webgpu::GpuTextureSampleType {
     fn from(value: crate::TextureSampleType) -> Self {
         match value {
             wgt::TextureSampleType::Float { filterable: true } => {
-                webgpu::GpuTextureSampleType::Depth
+                webgpu::GpuTextureSampleType::Float
             }
             wgt::TextureSampleType::Float { filterable: false } => {
                 webgpu::GpuTextureSampleType::UnfilterableFloat
