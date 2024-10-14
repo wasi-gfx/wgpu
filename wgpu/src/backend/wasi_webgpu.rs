@@ -78,7 +78,7 @@ impl crate::Context for ContextWasiWebgpu {
     type RenderBundleData = webgpu::GpuRenderBundle;
 
     type SurfaceId = ();
-    type SurfaceData = (Surface, Arc<Context>);
+    type SurfaceData = Arc<graphics_context::Context>;
     type SurfaceOutputDetail = SurfaceOutputDetail;
     type SubmissionIndex = (); // TODO: fix type
     type SubmissionIndexData = (); // TODO: fix type
@@ -103,9 +103,21 @@ impl crate::Context for ContextWasiWebgpu {
 
     unsafe fn instance_create_surface(
         &self,
-        _target: SurfaceTargetUnsafe,
+        target: SurfaceTargetUnsafe,
     ) -> Result<(Self::SurfaceId, Self::SurfaceData), crate::CreateSurfaceError> {
-        todo!()
+        let context = match target {
+            SurfaceTargetUnsafe::RawHandle {
+                raw_display_handle: _,
+                raw_window_handle,
+            } => match raw_window_handle {
+                raw_window_handle::RawWindowHandle::Wasi(handle) => unsafe {
+                    graphics_context::Context::from_handle(handle.handle)
+                },
+                _ => panic!("expected valid graphics_context::Context"),
+            },
+        };
+        let context = Arc::new(context);
+        Ok(((), context))
     }
 
     fn instance_request_adapter(
@@ -216,7 +228,31 @@ impl crate::Context for ContextWasiWebgpu {
         _adapter: &Self::AdapterId,
         _adapter_data: &Self::AdapterData,
     ) -> wgt::SurfaceCapabilities {
-        todo!()
+        let mut formats = vec![
+            wgt::TextureFormat::Rgba8Unorm,
+            wgt::TextureFormat::Bgra8Unorm,
+            wgt::TextureFormat::Rgba16Float,
+        ];
+        let mut mapped_formats = formats.iter().map(|format| {
+            let format: webgpu::GpuTextureFormat = (*format).into();
+            format
+        });
+        // Preferred canvas format will only be either "rgba8unorm" or "bgra8unorm".
+        // https://www.w3.org/TR/webgpu/#dom-gpu-getpreferredcanvasformat
+        let preferred_format = self.0.get_preferred_canvas_format();
+        if let Some(index) = mapped_formats.position(|format| format == preferred_format) {
+            formats.swap(0, index);
+        }
+
+        wgt::SurfaceCapabilities {
+            // https://gpuweb.github.io/gpuweb/#supported-context-formats
+            formats,
+            // Doesn't really have meaning on the web.
+            present_modes: vec![wgt::PresentMode::Fifo],
+            alpha_modes: vec![wgt::CompositeAlphaMode::Opaque],
+            // Statically set to RENDER_ATTACHMENT for now. See https://gpuweb.github.io/gpuweb/#dom-gpucanvasconfiguration-usage
+            usages: wgt::TextureUsages::RENDER_ATTACHMENT,
+        }
     }
 
     fn surface_configure(
@@ -227,7 +263,7 @@ impl crate::Context for ContextWasiWebgpu {
         device_data: &Self::DeviceData,
         _config: &crate::SurfaceConfiguration,
     ) {
-        device_data.connect_graphics_context(&surface_data.1);
+        device_data.connect_graphics_context(&surface_data);
     }
 
     fn surface_get_current_texture(
@@ -240,7 +276,7 @@ impl crate::Context for ContextWasiWebgpu {
         crate::SurfaceStatus,
         Self::SurfaceOutputDetail,
     ) {
-        let (_canvas, context) = surface_data;
+        let context = surface_data;
         let graphics_buffer = context.get_current_buffer();
         let texture = webgpu::GpuTexture::from_graphics_buffer(graphics_buffer);
 
