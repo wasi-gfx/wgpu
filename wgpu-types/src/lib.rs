@@ -6516,13 +6516,13 @@ impl std::ops::Deref for ExternalImageSource {
 }
 
 #[cfg(all(
-    target_arch = "wasm32",
+    feature = "web",
     feature = "fragile-send-sync-non-atomic-wasm",
     not(target_feature = "atomics")
 ))]
 unsafe impl Send for ExternalImageSource {}
 #[cfg(all(
-    target_arch = "wasm32",
+    feature = "web",
     feature = "fragile-send-sync-non-atomic-wasm",
     not(target_feature = "atomics")
 ))]
