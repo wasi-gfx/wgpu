@@ -342,7 +342,7 @@ static_assertions::assert_impl_all!(BufferSlice<'_>: Send, Sync);
 pub struct Texture {
     context: Arc<C>,
     id: ObjectId,
-    data: Box<Data>,
+    pub data: Box<Data>,
     owned: bool,
     descriptor: TextureDescriptor<'static>,
 }
