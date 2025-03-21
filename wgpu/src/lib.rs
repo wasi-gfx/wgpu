@@ -65,7 +65,7 @@
 #![doc(html_logo_url = "https://raw.githubusercontent.com/gfx-rs/wgpu/trunk/logo.png")]
 #![warn(missing_docs, rust_2018_idioms, unsafe_op_in_unsafe_fn)]
 
-mod backend;
+pub mod backend;
 mod context;
 pub mod util;
 #[macro_use]
