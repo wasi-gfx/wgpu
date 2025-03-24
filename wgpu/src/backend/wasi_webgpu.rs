@@ -737,12 +737,16 @@ impl crate::Context for ContextWasiWebgpu {
     fn command_encoder_copy_texture_to_texture(
         &self,
         _encoder: &Self::CommandEncoderId,
-        _encoder_data: &Self::CommandEncoderData,
-        _source: crate::ImageCopyTexture<'_>,
-        _destination: crate::ImageCopyTexture<'_>,
-        _copy_size: wgt::Extent3d,
+        encoder_data: &Self::CommandEncoderData,
+        source: crate::ImageCopyTexture<'_>,
+        destination: crate::ImageCopyTexture<'_>,
+        copy_size: wgt::Extent3d,
     ) {
-        todo!()
+        encoder_data.as_ref().unwrap().copy_texture_to_texture(
+            &(&source).into(),
+            &(&destination).into(),
+            copy_size.into(),
+        );
     }
 
     fn command_encoder_begin_compute_pass(
