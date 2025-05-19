@@ -7,14 +7,15 @@ use std::{
     any::Any,
     future::{ready, Ready},
     ops::Range,
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
-use wasi::webgpu::{graphics_context::Context, surface::Surface, webgpu};
+use wasi::{graphics_context::graphics_context::Context, surface::surface::Surface, webgpu::webgpu};
 
 wit_bindgen::generate!({
     path: "../wit",
     world: "wgpu:backend/main",
+    generate_all,
 });
 
 impl From<crate::context::ObjectId> for () {
@@ -49,7 +50,7 @@ impl crate::Context for ContextWasiWebgpu {
     type SamplerId = ();
     type SamplerData = webgpu::GpuSampler;
     type BufferId = ();
-    type BufferData = webgpu::GpuBuffer;
+    type BufferData = Arc<webgpu::GpuBuffer>;
     type TextureId = ();
     type TextureData = webgpu::GpuTexture;
     type QuerySetId = ();
@@ -123,9 +124,14 @@ impl crate::Context for ContextWasiWebgpu {
         _desc: &crate::DeviceDescriptor<'_>,
         _trace_dir: Option<&std::path::Path>,
     ) -> Self::RequestDeviceFuture {
-        let device = adapter_data.request_device(None);
-        let queue = device.queue();
-        ready(Ok(((), device, (), queue)))
+        // TODO: pass in real desc
+        ready(match adapter_data.request_device(None) {
+            Ok(device) => {
+                let queue = device.queue();
+                Ok(((), device, (), queue))
+            }
+            Err(e) => todo!()
+        })
     }
 
     fn instance_poll_all_devices(&self, _force_wait: bool) -> bool {
@@ -354,7 +360,7 @@ impl crate::Context for ContextWasiWebgpu {
         device_data: &Self::DeviceData,
         desc: &crate::BufferDescriptor<'_>,
     ) -> (Self::BufferId, Self::BufferData) {
-        ((), device_data.create_buffer(&desc.into()))
+        ((), Arc::new(device_data.create_buffer(&desc.into())))
     }
 
     fn device_create_texture(
@@ -484,7 +490,7 @@ impl crate::Context for ContextWasiWebgpu {
             mode.into(),
             Some(range.start),
             Some(range.end - range.start),
-        );
+        ).unwrap();
         (callback)(Ok(()));
     }
 
@@ -494,16 +500,16 @@ impl crate::Context for ContextWasiWebgpu {
         buffer_data: &Self::BufferData,
         sub_range: Range<wgt::BufferAddress>,
     ) -> Box<dyn crate::context::BufferMappedRange> {
-        let buffer = buffer_data.get_mapped_range(Some(sub_range.start), Some(sub_range.end));
-        let temporary_mapping = buffer.get();
+        let mapping = buffer_data.get_mapped_range_get_with_copy(Some(sub_range.start), Some(sub_range.end)).unwrap();
         Box::new(MappedBuffer {
-            buffer,
-            temporary_mapping,
+            buffer: Arc::downgrade(buffer_data),
+            mapping,
+            sub_range,
         })
     }
 
     fn buffer_unmap(&self, _buffer: &Self::BufferId, buffer_data: &Self::BufferData) {
-        buffer_data.unmap()
+        buffer_data.unmap().unwrap()
     }
 
     fn texture_create_view(
@@ -863,13 +869,13 @@ impl crate::Context for ContextWasiWebgpu {
         offset: wgt::BufferAddress,
         data: &[u8],
     ) {
-        queue_data.write_buffer(
+        queue_data.write_buffer_with_copy(
             &buffer_data,
             offset as u64,
-            None,
             data,
+            None,
             Some(data.len() as u64),
-        );
+        ).unwrap();
     }
 
     fn queue_validate_write_buffer(
@@ -928,7 +934,7 @@ impl crate::Context for ContextWasiWebgpu {
         data_layout: wgt::ImageDataLayout,
         size: wgt::Extent3d,
     ) {
-        queue_data.write_texture(&texture.into(), data, data_layout.into(), size.into())
+        queue_data.write_texture_with_copy(&texture.into(), data, data_layout.into(), size.into())
     }
 
     fn queue_submit<I: Iterator<Item = (Self::CommandBufferId, Self::CommandBufferData)>>(
@@ -991,7 +997,7 @@ impl crate::Context for ContextWasiWebgpu {
         pass_data
             .as_ref()
             .unwrap()
-            .set_bind_group(index, Some(bind_group_data), Some(offsets));
+            .set_bind_group(index, Some(bind_group_data), Some(offsets), None, None).unwrap();
     }
 
     fn compute_pass_set_push_constants(
@@ -1263,7 +1269,7 @@ impl crate::Context for ContextWasiWebgpu {
         pass_data
             .as_ref()
             .unwrap()
-            .set_bind_group(index, Some(bind_group_data), Some(offsets));
+            .set_bind_group(index, Some(bind_group_data), Some(offsets), None, None).unwrap();
     }
 
     fn render_pass_set_index_buffer(
@@ -1586,27 +1592,26 @@ pub struct SurfaceOutputDetail {
 
 #[derive(Debug)]
 pub struct MappedBuffer {
-    buffer: webgpu::NonStandardBuffer,
-    temporary_mapping: Vec<u8>,
+    buffer: Weak<webgpu::GpuBuffer>,
+    mapping: Vec<u8>,
+    sub_range: Range<wgt::BufferAddress>,
 }
 
 impl crate::context::BufferMappedRange for MappedBuffer {
     #[inline]
     fn slice(&self) -> &[u8] {
-        &self.temporary_mapping
+        &self.mapping
     }
 
     #[inline]
     fn slice_mut(&mut self) -> &mut [u8] {
-        &mut self.temporary_mapping
+        &mut self.mapping
     }
 }
 
 impl Drop for MappedBuffer {
     fn drop(&mut self) {
-        // Copy from the temporary mapping back into the array buffer that was
-        // originally provided by the runtime
-        self.buffer.set(&self.temporary_mapping);
+        self.buffer.upgrade().unwrap().get_mapped_range_set_with_copy(&self.mapping, Some(self.sub_range.start), Some(self.sub_range.end)).unwrap();
     }
 }
 
@@ -2311,7 +2316,7 @@ impl From<crate::Face> for webgpu::GpuCullMode {
     }
 }
 
-impl<'a> From<crate::ImageCopyTexture<'a>> for webgpu::GpuImageCopyTexture<'a> {
+impl<'a> From<crate::ImageCopyTexture<'a>> for webgpu::GpuTexelCopyTextureInfo<'a> {
     fn from(value: crate::ImageCopyTexture<'a>) -> Self {
         Self {
             texture: downcast_ref(value.texture.data.as_ref()),
@@ -2322,7 +2327,7 @@ impl<'a> From<crate::ImageCopyTexture<'a>> for webgpu::GpuImageCopyTexture<'a> {
     }
 }
 
-impl From<crate::ImageDataLayout> for webgpu::GpuImageDataLayout {
+impl From<crate::ImageDataLayout> for webgpu::GpuTexelCopyBufferLayout {
     fn from(value: crate::ImageDataLayout) -> Self {
         Self {
             offset: Some(value.offset),
@@ -2435,7 +2440,7 @@ impl From<crate::Extent3d> for webgpu::GpuExtent3D {
 impl<'a> From<&crate::BufferBinding<'a>> for webgpu::GpuBufferBinding<'a> {
     fn from(value: &crate::BufferBinding<'a>) -> Self {
         Self {
-            buffer: downcast_ref(value.buffer.data.as_ref()),
+            buffer: downcast_ref::<Arc<crate::backend::wasi_webgpu::wasi::webgpu::webgpu::GpuBuffer>>(value.buffer.data.as_ref()),
             offset: Some(value.offset),
             size: value.size.map(|s| s.try_into().unwrap()),
         }
@@ -2649,9 +2654,9 @@ impl<'a> From<&crate::ComputePipelineDescriptor<'a>> for webgpu::GpuComputePipel
             },
             layout: match value.layout {
                 Some(layout) => {
-                    webgpu::GpuLayout::GpuPipelineLayout(layout.data.downcast_ref().unwrap())
+                    webgpu::GpuLayoutMode::Specific(layout.data.downcast_ref().unwrap())
                 }
-                None => webgpu::GpuLayout::GpuAutoLayoutMode(webgpu::GpuAutoLayoutMode::Auto),
+                None => webgpu::GpuLayoutMode::Auto,
             },
         }
     }
@@ -2668,9 +2673,9 @@ impl<'a> From<&crate::RenderPipelineDescriptor<'a>> for webgpu::GpuRenderPipelin
             fragment: value.fragment.as_ref().map(|f| f.into()),
             layout: match value.layout {
                 Some(layout) => {
-                    webgpu::GpuLayout::GpuPipelineLayout(layout.data.downcast_ref().unwrap())
+                    webgpu::GpuLayoutMode::Specific(layout.data.downcast_ref().unwrap())
                 }
-                None => webgpu::GpuLayout::GpuAutoLayoutMode(webgpu::GpuAutoLayoutMode::Auto),
+                None => webgpu::GpuLayoutMode::Auto,
             },
         }
     }
@@ -2682,7 +2687,7 @@ impl<'a> From<&crate::PipelineLayoutDescriptor<'a>> for webgpu::GpuPipelineLayou
             bind_group_layouts: value
                 .bind_group_layouts
                 .iter()
-                .map(|b| downcast_ref(b.data.as_ref()))
+                .map(|b| Some(downcast_ref(b.data.as_ref())))
                 .collect(),
             label: value.label.map(|l| l.into()),
         }
@@ -2942,9 +2947,9 @@ impl<'a> From<&crate::RenderPassDescriptor<'a, 'a>> for webgpu::GpuRenderPassDes
     }
 }
 
-impl<'a> From<&crate::ImageCopyTexture<'a>> for webgpu::GpuImageCopyTexture<'a> {
+impl<'a> From<&crate::ImageCopyTexture<'a>> for webgpu::GpuTexelCopyTextureInfo<'a> {
     fn from(value: &crate::ImageCopyTexture<'a>) -> Self {
-        webgpu::GpuImageCopyTexture {
+        webgpu::GpuTexelCopyTextureInfo {
             texture: value.texture.data.downcast_ref().unwrap(),
             mip_level: Some(value.mip_level),
             origin: Some((&value.origin).into()),
@@ -2953,9 +2958,9 @@ impl<'a> From<&crate::ImageCopyTexture<'a>> for webgpu::GpuImageCopyTexture<'a> 
     }
 }
 
-impl<'a> From<&crate::ImageCopyBuffer<'a>> for webgpu::GpuImageCopyBuffer<'a> {
+impl<'a> From<&crate::ImageCopyBuffer<'a>> for webgpu::GpuTexelCopyBufferInfo<'a> {
     fn from(value: &crate::ImageCopyBuffer<'a>) -> Self {
-        webgpu::GpuImageCopyBuffer {
+        webgpu::GpuTexelCopyBufferInfo {
             buffer: value.buffer.data.downcast_ref().unwrap(),
             offset: Some(value.layout.offset),
             bytes_per_row: value.layout.bytes_per_row,
