@@ -167,7 +167,7 @@ web-sys = "0.3.67"
 web-time = "0.2.4"
 
 # wasi dependencies
-wit-bindgen = "0.24"
+wit-bindgen = "0.42"
 
 # deno dependencies
 deno_console = "0.125.0"

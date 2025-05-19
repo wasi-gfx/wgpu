@@ -7,5 +7,5 @@ The examples are a subset of the main examples.
 ```bash
 cargo build --target wasm32-unknown-unknown --release --package wgpu-examples-wasi --lib --features wasi --no-default-features
 wasm-tools component new ./target/wasm32-unknown-unknown/release/wgpu_examples_wasi.wasm -o ./target/examples_component.wasm
-cargo +1.77 run --bin wgpu-examples-wasi --features="wasi-runtime" hello_compute
+cargo run --bin wgpu-examples-wasi --features="wasi-runtime" hello_compute
 ```
