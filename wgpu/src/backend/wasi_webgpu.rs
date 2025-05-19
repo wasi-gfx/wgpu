@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use wasi::{graphics_context::graphics_context::Context, surface::surface::Surface, webgpu::webgpu};
+use wasi::{graphics_context::graphics_context, surface::surface::Surface, webgpu::webgpu};
 
 wit_bindgen::generate!({
     path: "../wit",

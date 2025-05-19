@@ -1,9 +1,9 @@
 // fake temporary winit, until winit adds wasi support
 
 pub mod window {
-    use crate::entrypoint_wasi::wasi::webgpu::{
-        graphics_context::Context,
-        surface::{CreateDesc, Surface},
+    use crate::entrypoint_wasi::wasi::{
+        graphics_context::graphics_context::Context,
+        surface::surface::{CreateDesc, Surface},
     };
     use wgpu::rwh::{HasDisplayHandle, HasWindowHandle};
 
