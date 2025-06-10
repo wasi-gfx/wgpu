@@ -3,6 +3,7 @@ use crate::{context::QueueWriteBuffer, SurfaceTargetUnsafe, UncapturedErrorHandl
 use std::{
     any::Any,
     future::{ready, Ready},
+    mem::ManuallyDrop,
     ops::Range,
     sync::{Arc, Weak},
 };
@@ -75,7 +76,7 @@ impl crate::Context for ContextWasiWebgpu {
     type RenderBundleData = webgpu::GpuRenderBundle;
 
     type SurfaceId = ();
-    type SurfaceData = Arc<graphics_context::Context>;
+    type SurfaceData = Arc<ManuallyDrop<graphics_context::Context>>;
     type SurfaceOutputDetail = SurfaceOutputDetail;
     type SubmissionIndex = (); // TODO: fix type
     type SubmissionIndexData = (); // TODO: fix type
@@ -100,9 +101,21 @@ impl crate::Context for ContextWasiWebgpu {
 
     unsafe fn instance_create_surface(
         &self,
-        _target: SurfaceTargetUnsafe,
+        target: SurfaceTargetUnsafe,
     ) -> Result<(Self::SurfaceId, Self::SurfaceData), crate::CreateSurfaceError> {
-        todo!()
+        let context = match target {
+            SurfaceTargetUnsafe::RawHandle {
+                raw_display_handle: _,
+                raw_window_handle,
+            } => match raw_window_handle {
+                raw_window_handle::RawWindowHandle::Wasi(handle) => unsafe {
+                    graphics_context::Context::from_handle(handle.handle)
+                },
+                _ => panic!("expected valid graphics_context::Context"),
+            },
+        };
+        let context = Arc::new(ManuallyDrop::new(context));
+        Ok(((), context))
     }
 
     fn instance_request_adapter(
@@ -1693,7 +1706,7 @@ impl QueueWriteBuffer for WebQueueWriteBuffer {
 }
 
 pub struct SurfaceOutputDetail {
-    pub(crate) graphics_context: Arc<webgpu::Context>,
+    pub(crate) graphics_context: Arc<ManuallyDrop<webgpu::Context>>,
 }
 
 #[derive(Debug)]
