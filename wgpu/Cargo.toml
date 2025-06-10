@@ -172,6 +172,7 @@ serde = { workspace = true, features = ["derive"], optional = true }
 smallvec.workspace = true
 static_assertions.workspace = true
 wit-bindgen = { workspace = true, optional = true }
+bitflags = { workspace = true }
 
 [dependencies.naga]
 workspace = true

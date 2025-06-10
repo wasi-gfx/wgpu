@@ -1,7 +1,4 @@
-use crate::{
-    context::{downcast_ref, QueueWriteBuffer},
-    SurfaceTargetUnsafe, UncapturedErrorHandler,
-};
+use crate::{context::QueueWriteBuffer, SurfaceTargetUnsafe, UncapturedErrorHandler};
 
 use std::{
     any::Any,
@@ -10,7 +7,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use wasi::{graphics_context::graphics_context::Context, surface::surface::Surface, webgpu::webgpu};
+use wasi::{graphics_context::graphics_context, webgpu::webgpu};
 
 wit_bindgen::generate!({
     path: "../wit",
@@ -78,7 +75,7 @@ impl crate::Context for ContextWasiWebgpu {
     type RenderBundleData = webgpu::GpuRenderBundle;
 
     type SurfaceId = ();
-    type SurfaceData = (Surface, Arc<Context>);
+    type SurfaceData = Arc<graphics_context::Context>;
     type SurfaceOutputDetail = SurfaceOutputDetail;
     type SubmissionIndex = (); // TODO: fix type
     type SubmissionIndexData = (); // TODO: fix type
@@ -110,10 +107,22 @@ impl crate::Context for ContextWasiWebgpu {
 
     fn instance_request_adapter(
         &self,
-        _options: &crate::RequestAdapterOptions<'_, '_>,
+        options: &crate::RequestAdapterOptions<'_, '_>,
     ) -> Self::RequestAdapterFuture {
-        // TODO: pass in options
-        let adapter = self.0.request_adapter(None).unwrap();
+        let options = webgpu::GpuRequestAdapterOptions {
+            power_preference: match options.power_preference {
+                wgt::PowerPreference::None => None,
+                wgt::PowerPreference::LowPower => Some(webgpu::GpuPowerPreference::LowPower),
+                wgt::PowerPreference::HighPerformance => {
+                    Some(webgpu::GpuPowerPreference::HighPerformance)
+                }
+            },
+            force_fallback_adapter: Some(options.force_fallback_adapter),
+            // TODO: pass real values
+            xr_compatible: None,
+            feature_level: None,
+        };
+        let adapter = self.0.request_adapter(Some(&options)).unwrap();
         ready(Some(((), adapter)))
     }
 
@@ -121,16 +130,46 @@ impl crate::Context for ContextWasiWebgpu {
         &self,
         _adapter: &Self::AdapterId,
         adapter_data: &Self::AdapterData,
-        _desc: &crate::DeviceDescriptor<'_>,
+        desc: &crate::DeviceDescriptor<'_>,
         _trace_dir: Option<&std::path::Path>,
     ) -> Self::RequestDeviceFuture {
-        // TODO: pass in real desc
-        ready(match adapter_data.request_device(None) {
+        let required_features = desc.required_features.iter().filter_map(|f| {
+            bitflags::bitflags_match!(f, {
+                crate::Features::DEPTH_CLIP_CONTROL => Some(webgpu::GpuFeatureName::DepthClipControl),
+                crate::Features::DEPTH32FLOAT_STENCIL8 => Some(webgpu::GpuFeatureName::Depth32floatStencil8),
+                crate::Features::TEXTURE_COMPRESSION_BC => Some(webgpu::GpuFeatureName::TextureCompressionBc),
+                // crate::Features::TEXTURE_COMPRESSION_BC_SLICED3D => Some(webgpu::GpuFeatureName::TextureCompressionBcSliced3d),
+                crate::Features::TEXTURE_COMPRESSION_ETC2 => Some(webgpu::GpuFeatureName::TextureCompressionEtc2),
+                crate::Features::TEXTURE_COMPRESSION_ASTC => Some(webgpu::GpuFeatureName::TextureCompressionAstc),
+                // crate::Features::TEXTURE_COMPRESSION_ASTC_SLICED3D => Some(webgpu::GpuFeatureName::TextureCompressionAstcSliced3d),
+                crate::Features::TIMESTAMP_QUERY => Some(webgpu::GpuFeatureName::TimestampQuery),
+                crate::Features::INDIRECT_FIRST_INSTANCE => Some(webgpu::GpuFeatureName::IndirectFirstInstance),
+                crate::Features::SHADER_F16 => Some(webgpu::GpuFeatureName::ShaderF16),
+                crate::Features::RG11B10UFLOAT_RENDERABLE => Some(webgpu::GpuFeatureName::Rg11b10ufloatRenderable),
+                crate::Features::BGRA8UNORM_STORAGE => Some(webgpu::GpuFeatureName::Bgra8unormStorage),
+                crate::Features::FLOAT32_FILTERABLE => Some(webgpu::GpuFeatureName::Float32Filterable),
+                // crate::Features::FLOAT32_BLENDABLE => Some(webgpu::GpuFeatureName::Float32Blendable),
+                // crate::Features::CLIP_DISTANCES => Some(webgpu::GpuFeatureName::ClipDistances),
+                crate::Features::DUAL_SOURCE_BLENDING => Some(webgpu::GpuFeatureName::DualSourceBlending),
+                // crate::Features::SUBGROUPS => Some(webgpu::GpuFeatureName::Subgroups),
+                // crate::Features::TEXTURE_FORMAT_16BIT_NORM | crate::Features::TEXTURE_COMPRESSION_ASTC_HDR | crate::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES | crate::Features::PIPELINE_STATISTICS_QUERY | crate::Features::TIMESTAMP_QUERY_INSIDE_PASSES | crate::Features::MAPPABLE_PRIMARY_BUFFERS | crate::Features::TEXTURE_BINDING_ARRAY | crate::Features::BUFFER_BINDING_ARRAY | crate::Features::STORAGE_RESOURCE_BINDING_ARRAY | crate::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING | crate::Features::UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING | crate::Features::PARTIALLY_BOUND_BINDING_ARRAY | crate::Features::MULTI_DRAW_INDIRECT | crate::Features::MULTI_DRAW_INDIRECT_COUNT | crate::Features::PUSH_CONSTANTS | crate::Features::ADDRESS_MODE_CLAMP_TO_ZERO | crate::Features::ADDRESS_MODE_CLAMP_TO_BORDER | crate::Features::POLYGON_MODE_LINE | crate::Features::POLYGON_MODE_POINT | crate::Features::CONSERVATIVE_RASTERIZATION | crate::Features::VERTEX_WRITABLE_STORAGE | crate::Features::CLEAR_TEXTURE | crate::Features::SPIRV_SHADER_PASSTHROUGH | crate::Features::MULTIVIEW | crate::Features::VERTEX_ATTRIBUTE_64BIT | crate::Features::SHADER_UNUSED_VERTEX_OUTPUT | crate::Features::TEXTURE_FORMAT_NV12 | crate::Features::RAY_TRACING_ACCELERATION_STRUCTURE | crate::Features::RAY_QUERY | crate::Features::SHADER_F64 | crate::Features::SHADER_I16 | crate::Features::SHADER_PRIMITIVE_INDEX | crate::Features::SHADER_EARLY_DEPTH_TEST => unimplemented!(),
+                _ => None
+            })
+        }).collect();
+
+        let desc = webgpu::GpuDeviceDescriptor {
+            required_features: Some(required_features),
+            label: desc.label.map(|l| l.to_owned()),
+            // TODO: pass real values
+            required_limits: None,
+            default_queue: None,
+        };
+        ready(match adapter_data.request_device(Some(desc)) {
             Ok(device) => {
                 let queue = device.queue();
                 Ok(((), device, (), queue))
             }
-            Err(e) => todo!()
+            Err(_e) => todo!(),
         })
     }
 
@@ -194,11 +233,11 @@ impl crate::Context for ContextWasiWebgpu {
 
     fn adapter_get_texture_format_features(
         &self,
-        _adapter: &Self::AdapterId,
-        _adapter_data: &Self::AdapterData,
-        _format: wgt::TextureFormat,
+        adapter: &Self::AdapterId,
+        adapter_data: &Self::AdapterData,
+        format: wgt::TextureFormat,
     ) -> wgt::TextureFormatFeatures {
-        todo!()
+        format.guaranteed_format_features(self.adapter_features(adapter, adapter_data))
     }
 
     fn adapter_get_presentation_timestamp(
@@ -216,7 +255,31 @@ impl crate::Context for ContextWasiWebgpu {
         _adapter: &Self::AdapterId,
         _adapter_data: &Self::AdapterData,
     ) -> wgt::SurfaceCapabilities {
-        todo!()
+        let mut formats = vec![
+            wgt::TextureFormat::Rgba8Unorm,
+            wgt::TextureFormat::Bgra8Unorm,
+            wgt::TextureFormat::Rgba16Float,
+        ];
+        let mut mapped_formats = formats.iter().map(|format| {
+            let format: webgpu::GpuTextureFormat = (*format).into();
+            format
+        });
+        // Preferred canvas format will only be either "rgba8unorm" or "bgra8unorm".
+        // https://www.w3.org/TR/webgpu/#dom-gpu-getpreferredcanvasformat
+        let preferred_format = self.0.get_preferred_canvas_format();
+        if let Some(index) = mapped_formats.position(|format| format == preferred_format) {
+            formats.swap(0, index);
+        }
+
+        wgt::SurfaceCapabilities {
+            // https://gpuweb.github.io/gpuweb/#supported-context-formats
+            formats,
+            // Doesn't really have meaning on the web.
+            present_modes: vec![wgt::PresentMode::Fifo],
+            alpha_modes: vec![wgt::CompositeAlphaMode::Opaque],
+            // Statically set to RENDER_ATTACHMENT for now. See https://gpuweb.github.io/gpuweb/#dom-gpucanvasconfiguration-usage
+            usages: wgt::TextureUsages::RENDER_ATTACHMENT,
+        }
     }
 
     fn surface_configure(
@@ -227,7 +290,7 @@ impl crate::Context for ContextWasiWebgpu {
         device_data: &Self::DeviceData,
         _config: &crate::SurfaceConfiguration,
     ) {
-        device_data.connect_graphics_context(&surface_data.1);
+        device_data.connect_graphics_context(&surface_data);
     }
 
     fn surface_get_current_texture(
@@ -240,7 +303,7 @@ impl crate::Context for ContextWasiWebgpu {
         crate::SurfaceStatus,
         Self::SurfaceOutputDetail,
     ) {
-        let (_canvas, context) = surface_data;
+        let context = Arc::clone(surface_data);
         let graphics_buffer = context.get_current_buffer();
         let texture = webgpu::GpuTexture::from_graphics_buffer(graphics_buffer);
 
@@ -249,7 +312,7 @@ impl crate::Context for ContextWasiWebgpu {
             Some(texture),
             wgt::SurfaceStatus::Good,
             SurfaceOutputDetail {
-                graphics_context: Arc::clone(&context),
+                graphics_context: context,
             },
         )
     }
@@ -463,18 +526,24 @@ impl crate::Context for ContextWasiWebgpu {
     fn device_push_error_scope(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
-        _filter: crate::ErrorFilter,
+        device_data: &Self::DeviceData,
+        filter: crate::ErrorFilter,
     ) {
-        todo!()
+        device_data.push_error_scope(match filter {
+            crate::ErrorFilter::OutOfMemory => webgpu::GpuErrorFilter::OutOfMemory,
+            crate::ErrorFilter::Validation => webgpu::GpuErrorFilter::Validation,
+        });
     }
 
     fn device_pop_error_scope(
         &self,
         _device: &Self::DeviceId,
-        _device_data: &Self::DeviceData,
+        device_data: &Self::DeviceData,
     ) -> Self::PopErrorScopeFuture {
-        todo!()
+        ready(match device_data.pop_error_scope() {
+            Ok(error) => error.map(|error| error.into()),
+            Err(_e) => todo!(),
+        })
     }
 
     fn buffer_map_async(
@@ -486,11 +555,13 @@ impl crate::Context for ContextWasiWebgpu {
         callback: crate::context::BufferMapCallback,
     ) {
         // TODO: make this function async once wasi can
-        buffer_data.map_async(
-            mode.into(),
-            Some(range.start),
-            Some(range.end - range.start),
-        ).unwrap();
+        buffer_data
+            .map_async(
+                mode.into(),
+                Some(range.start),
+                Some(range.end - range.start),
+            )
+            .unwrap();
         (callback)(Ok(()));
     }
 
@@ -500,7 +571,9 @@ impl crate::Context for ContextWasiWebgpu {
         buffer_data: &Self::BufferData,
         sub_range: Range<wgt::BufferAddress>,
     ) -> Box<dyn crate::context::BufferMappedRange> {
-        let mapping = buffer_data.get_mapped_range_get_with_copy(Some(sub_range.start), Some(sub_range.end)).unwrap();
+        let mapping = buffer_data
+            .get_mapped_range_get_with_copy(Some(sub_range.start), Some(sub_range.end))
+            .unwrap();
         Box::new(MappedBuffer {
             buffer: Arc::downgrade(buffer_data),
             mapping,
@@ -701,12 +774,16 @@ impl crate::Context for ContextWasiWebgpu {
     fn command_encoder_copy_texture_to_texture(
         &self,
         _encoder: &Self::CommandEncoderId,
-        _encoder_data: &Self::CommandEncoderData,
-        _source: crate::ImageCopyTexture<'_>,
-        _destination: crate::ImageCopyTexture<'_>,
-        _copy_size: wgt::Extent3d,
+        encoder_data: &Self::CommandEncoderData,
+        source: crate::ImageCopyTexture<'_>,
+        destination: crate::ImageCopyTexture<'_>,
+        copy_size: wgt::Extent3d,
     ) {
-        todo!()
+        encoder_data.as_ref().unwrap().copy_texture_to_texture(
+            &(&source).into(),
+            &(&destination).into(),
+            copy_size.into(),
+        );
     }
 
     fn command_encoder_begin_compute_pass(
@@ -869,13 +946,15 @@ impl crate::Context for ContextWasiWebgpu {
         offset: wgt::BufferAddress,
         data: &[u8],
     ) {
-        queue_data.write_buffer_with_copy(
-            &buffer_data,
-            offset as u64,
-            data,
-            None,
-            Some(data.len() as u64),
-        ).unwrap();
+        queue_data
+            .write_buffer_with_copy(
+                &buffer_data,
+                offset as u64,
+                data,
+                None,
+                Some(data.len() as u64),
+            )
+            .unwrap()
     }
 
     fn queue_validate_write_buffer(
@@ -883,11 +962,36 @@ impl crate::Context for ContextWasiWebgpu {
         _queue: &Self::QueueId,
         _queue_data: &Self::QueueData,
         _buffer: &Self::BufferId,
-        _buffer_data: &Self::BufferData,
-        _offset: wgt::BufferAddress,
-        _size: wgt::BufferSize,
+        buffer_data: &Self::BufferData,
+        offset: wgt::BufferAddress,
+        size: wgt::BufferSize,
     ) -> Option<()> {
-        todo!()
+        let usage = wgt::BufferUsages::from_bits_truncate(buffer_data.usage());
+        // TODO: actually send this down the error scope
+        if !usage.contains(wgt::BufferUsages::COPY_DST) {
+            log::error!("Destination buffer is missing the `COPY_DST` usage flag");
+            return None;
+        }
+        let write_size = u64::from(size);
+        if write_size % wgt::COPY_BUFFER_ALIGNMENT != 0 {
+            log::error!(
+                "Copy size {} does not respect `COPY_BUFFER_ALIGNMENT`",
+                size
+            );
+            return None;
+        }
+        if offset % wgt::COPY_BUFFER_ALIGNMENT != 0 {
+            log::error!(
+                "Buffer offset {} is not aligned to block size or `COPY_BUFFER_ALIGNMENT`",
+                offset
+            );
+            return None;
+        }
+        if write_size + offset > buffer_data.size() {
+            log::error!("copy of {}..{} would end up overrunning the bounds of the destination buffer of size {}", offset, offset + write_size, buffer_data.size());
+            return None;
+        }
+        Some(())
     }
 
     fn queue_create_staging_buffer(
@@ -997,7 +1101,8 @@ impl crate::Context for ContextWasiWebgpu {
         pass_data
             .as_ref()
             .unwrap()
-            .set_bind_group(index, Some(bind_group_data), Some(offsets), None, None).unwrap();
+            .set_bind_group(index, Some(bind_group_data), Some(offsets), None, None)
+            .unwrap();
     }
 
     fn compute_pass_set_push_constants(
@@ -1269,7 +1374,8 @@ impl crate::Context for ContextWasiWebgpu {
         pass_data
             .as_ref()
             .unwrap()
-            .set_bind_group(index, Some(bind_group_data), Some(offsets), None, None).unwrap();
+            .set_bind_group(index, Some(bind_group_data), Some(offsets), None, None)
+            .unwrap();
     }
 
     fn render_pass_set_index_buffer(
@@ -1611,7 +1717,15 @@ impl crate::context::BufferMappedRange for MappedBuffer {
 
 impl Drop for MappedBuffer {
     fn drop(&mut self) {
-        self.buffer.upgrade().unwrap().get_mapped_range_set_with_copy(&self.mapping, Some(self.sub_range.start), Some(self.sub_range.end)).unwrap();
+        self.buffer
+            .upgrade()
+            .unwrap()
+            .get_mapped_range_set_with_copy(
+                &self.mapping,
+                Some(self.sub_range.start),
+                Some(self.sub_range.end),
+            )
+            .unwrap();
     }
 }
 
@@ -2319,7 +2433,7 @@ impl From<crate::Face> for webgpu::GpuCullMode {
 impl<'a> From<crate::ImageCopyTexture<'a>> for webgpu::GpuTexelCopyTextureInfo<'a> {
     fn from(value: crate::ImageCopyTexture<'a>) -> Self {
         Self {
-            texture: downcast_ref(value.texture.data.as_ref()),
+            texture: value.texture.data.downcast_ref().unwrap(),
             mip_level: Some(value.mip_level),
             origin: Some((&value.origin).into()),
             aspect: Some(value.aspect.into()),
@@ -2374,7 +2488,7 @@ impl<'a> From<&crate::FragmentState<'a>> for webgpu::GpuFragmentState<'a> {
                 .iter()
                 .map(|t| t.as_ref().map(|t| t.into()))
                 .collect(),
-            module: downcast_ref(value.module.data.as_ref()),
+            module: value.module.data.downcast_ref().unwrap(),
             entry_point: Some(value.entry_point.into()),
             // TODO: what should be the default here?
             constants: None,
@@ -2406,7 +2520,7 @@ impl<'a> From<&crate::VertexState<'a>> for webgpu::GpuVertexState<'a> {
     fn from(value: &crate::VertexState<'a>) -> Self {
         Self {
             buffers: Some(value.buffers.iter().map(|b| Some(b.into())).collect()),
-            module: downcast_ref(value.module.data.as_ref()),
+            module: value.module.data.downcast_ref().unwrap(),
             entry_point: Some(value.entry_point.into()),
             // TODO: what should be the default here?
             constants: None,
@@ -2440,7 +2554,11 @@ impl From<crate::Extent3d> for webgpu::GpuExtent3D {
 impl<'a> From<&crate::BufferBinding<'a>> for webgpu::GpuBufferBinding<'a> {
     fn from(value: &crate::BufferBinding<'a>) -> Self {
         Self {
-            buffer: downcast_ref::<Arc<crate::backend::wasi_webgpu::wasi::webgpu::webgpu::GpuBuffer>>(value.buffer.data.as_ref()),
+            buffer: value
+                .buffer
+                .data
+                .downcast_ref::<Arc<crate::backend::wasi_webgpu::wasi::webgpu::webgpu::GpuBuffer>>()
+                .unwrap(),
             offset: Some(value.offset),
             size: value.size.map(|s| s.try_into().unwrap()),
         }
@@ -2457,13 +2575,13 @@ impl<'a> From<&crate::BindingResource<'a>> for webgpu::GpuBindingResource<'a> {
                 panic!("WASI backend does not support arrays of buffers")
             }
             crate::BindingResource::Sampler(sampler) => {
-                webgpu::GpuBindingResource::GpuSampler(downcast_ref(sampler.data.as_ref()))
+                webgpu::GpuBindingResource::GpuSampler(sampler.data.downcast_ref().unwrap())
             }
             crate::BindingResource::SamplerArray(_) => {
                 panic!("WASI backend does not support arrays of samplers")
             }
             crate::BindingResource::TextureView(view) => {
-                webgpu::GpuBindingResource::GpuTextureView(downcast_ref(view.data.as_ref()))
+                webgpu::GpuBindingResource::GpuTextureView(view.data.downcast_ref().unwrap())
             }
             crate::BindingResource::TextureViewArray(_) => {
                 panic!("WASI backend does not support BINDING_INDEXING extension")
@@ -2590,7 +2708,7 @@ impl<'a> From<&crate::ComputePassTimestampWrites<'a>>
 {
     fn from(value: &crate::ComputePassTimestampWrites<'a>) -> Self {
         Self {
-            query_set: downcast_ref(value.query_set.data.as_ref()),
+            query_set: value.query_set.data.downcast_ref().unwrap(),
             beginning_of_pass_write_index: value.beginning_of_pass_write_index,
             end_of_pass_write_index: value.end_of_pass_write_index,
         }
@@ -2687,7 +2805,7 @@ impl<'a> From<&crate::PipelineLayoutDescriptor<'a>> for webgpu::GpuPipelineLayou
             bind_group_layouts: value
                 .bind_group_layouts
                 .iter()
-                .map(|b| Some(downcast_ref(b.data.as_ref())))
+                .map(|b| Some(b.data.downcast_ref().unwrap()))
                 .collect(),
             label: value.label.map(|l| l.into()),
         }
@@ -2815,7 +2933,7 @@ impl<'a> From<&crate::SamplerDescriptor<'a>> for webgpu::GpuSamplerDescriptor {
 impl<'a> From<&crate::BindGroupDescriptor<'a>> for webgpu::GpuBindGroupDescriptor<'a> {
     fn from(value: &crate::BindGroupDescriptor<'a>) -> Self {
         webgpu::GpuBindGroupDescriptor {
-            layout: downcast_ref(value.layout.data.as_ref()),
+            layout: value.layout.data.downcast_ref().unwrap(),
             entries: value.entries.iter().map(|entry| entry.into()).collect(),
             label: value.label.map(|l| l.into()),
         }
@@ -2867,7 +2985,7 @@ impl<'a> From<&crate::RenderPassColorAttachment<'a>> for webgpu::GpuRenderPassCo
             crate::LoadOp::Load => None,
         };
         webgpu::GpuRenderPassColorAttachment {
-            view: value.view.data.as_ref().downcast_ref().unwrap(),
+            view: value.view.data.downcast_ref().unwrap(),
             resolve_target: value.resolve_target.map(|t| t.data.downcast_ref().unwrap()),
             clear_value,
             load_op: (&value.ops.load).into(),
@@ -2898,7 +3016,7 @@ impl<'a> From<&crate::RenderPassDepthStencilAttachment<'a>>
             })
             .flatten();
         webgpu::GpuRenderPassDepthStencilAttachment {
-            view: value.view.data.as_ref().downcast_ref().unwrap(),
+            view: value.view.data.downcast_ref().unwrap(),
             depth_clear_value,
             depth_load_op: value.depth_ops.as_ref().map(|o| (&o.load).into()),
             depth_store_op: value.depth_ops.as_ref().map(|o| (&o.store).into()),
@@ -2975,6 +3093,22 @@ impl From<&crate::Origin3d> for webgpu::GpuOrigin3D {
             x: Some(value.x),
             y: Some(value.y),
             z: Some(value.z),
+        }
+    }
+}
+
+impl From<webgpu::GpuError> for crate::Error {
+    fn from(value: webgpu::GpuError) -> Self {
+        let source = Box::<dyn std::error::Error + Send + Sync>::from("<wasi:webgpu error>");
+        match value.kind() {
+            webgpu::GpuErrorKind::ValidationError => crate::Error::Validation {
+                source,
+                description: value.message(),
+            },
+            webgpu::GpuErrorKind::OutOfMemoryError => crate::Error::OutOfMemory { source },
+            webgpu::GpuErrorKind::InternalError => {
+                panic!("internal wasi:webgpu error")
+            }
         }
     }
 }
