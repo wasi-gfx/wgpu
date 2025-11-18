@@ -48,7 +48,7 @@ vulkan-portability = ["wgc?/vulkan"]
 webgpu = ["naga?/wgsl-out", "wgt/web"]
 
 ## Enables the WASI-WebGPU backend.
-wasi = ["wit-bindgen"]
+wasi = ["wit-bindgen", "naga?/wgsl-out"]
 
 ## Enables the GLES backend on Wasm
 ##
